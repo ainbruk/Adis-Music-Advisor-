@@ -7,20 +7,26 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return null;
 
-  const [profile, recentRecs, feedbackCount] = await Promise.all([
-    prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
-    prisma.recommendation.findMany({
-      where: { userId: session.user.id },
-      include: { feedback: true },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-    }),
-    prisma.feedback.count({ where: { userId: session.user.id } }),
-  ]);
+  let profile = null;
+  let recentRecs: any[] = [];
+  let feedbackCount = 0;
+  let positiveCount = 0;
 
-  const positiveCount = await prisma.feedback.count({
-    where: { userId: session.user.id, positive: true },
-  });
+  try {
+    [profile, recentRecs, feedbackCount, positiveCount] = await Promise.all([
+      prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
+      prisma.recommendation.findMany({
+        where: { userId: session.user.id },
+        include: { feedback: true },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+      }),
+      prisma.feedback.count({ where: { userId: session.user.id } }),
+      prisma.feedback.count({ where: { userId: session.user.id, positive: true } }),
+    ]);
+  } catch {
+    // DB nicht konfiguriert – leeres Dashboard anzeigen
+  }
 
   return (
     <DashboardHome

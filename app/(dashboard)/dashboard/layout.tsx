@@ -8,7 +8,14 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  let session;
+  try {
+    session = await getServerSession(authOptions);
+  } catch {
+    // Keine Session möglich (z.B. DB nicht konfiguriert)
+    redirect("/");
+  }
+
   if (!session?.user) redirect("/");
 
   return (

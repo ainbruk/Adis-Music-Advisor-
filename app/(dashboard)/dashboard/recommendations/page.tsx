@@ -7,7 +7,13 @@ export default async function RecommendationsPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return null;
 
-  const recs = await getStoredRecommendations();
+  let recs: any[] = [];
+  try {
+    recs = await getStoredRecommendations();
+  } catch {
+    // DB nicht konfiguriert
+  }
+
   const hasSpotify = !!(session as any).accessToken;
 
   return <RecommendationsView initialRecs={recs} hasSpotify={hasSpotify} />;

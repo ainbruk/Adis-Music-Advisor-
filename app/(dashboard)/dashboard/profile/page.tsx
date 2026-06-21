@@ -7,21 +7,26 @@ export default async function ProfilePage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return null;
 
-  const profile = await prisma.userProfile.findUnique({
-    where: { userId: session.user.id },
-  });
+  let profile = null;
+  let feedbackStats: any[] = [];
 
-  const hasSpotify = !!(session as any).accessToken;
-  const feedbackStats = await prisma.feedback.groupBy({
-    by: ["positive"],
-    where: { userId: session.user.id },
-    _count: { id: true },
-  });
+  try {
+    [profile, feedbackStats] = await Promise.all([
+      prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
+      prisma.feedback.groupBy({
+        by: ["positive"],
+        where: { userId: session.user.id },
+        _count: { id: true },
+      }),
+    ]);
+  } catch {
+    // DB nicht konfiguriert
+  }
 
   return (
     <ProfileView
       profile={profile}
-      hasSpotify={hasSpotify}
+      hasSpotify={!!(session as any).accessToken}
       feedbackStats={feedbackStats}
     />
   );
