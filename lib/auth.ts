@@ -3,6 +3,11 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import SpotifyProvider from "next-auth/providers/spotify";
 import { prisma } from "@/lib/prisma";
 
+// NEXTAUTH_URL automatisch aus VERCEL_URL ableiten wenn nicht gesetzt
+if (!process.env.NEXTAUTH_URL && process.env.VERCEL_URL) {
+  process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+}
+
 const SPOTIFY_SCOPES = [
   "user-read-email",
   "user-read-private",
