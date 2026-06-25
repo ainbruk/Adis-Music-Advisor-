@@ -42,23 +42,17 @@ export function LandingPage() {
         <div className="pt-20 pb-16 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-brand-300 text-sm font-medium mb-8 border border-brand-600/30">
             <Star className="w-4 h-4 text-accent-yellow fill-accent-yellow" />
-            <span>Anti-Mainstream · Kuratiert · Tief</span>
+            <span>Kuratiert · Tief · Berührend</span>
           </div>
 
           <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
             Musik, die{" "}
-            <span className="gradient-text">bewegt</span>
-            <br />
-            statt{" "}
-            <span className="text-white/40 line-through decoration-accent-coral/60">
-              Fliessband
-            </span>
+            <span className="gradient-text">weiss</span>
           </h1>
 
           <p className="text-xl text-white/60 max-w-2xl mx-auto mb-12 leading-relaxed">
             CuratedVibe analysiert deinen Geschmack und findet musikalische Perlen
-            jenseits des Mainstreams – mit KI-gestütztem Anti-Mainstream-Algorithmus
-            und persönlicher Feedback-Schlaufe.
+            mit KI-gestütztem Algorithmus und persönlicher Feedback-Schlaufe.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -88,8 +82,8 @@ export function LandingPage() {
               icon: TrendingDown,
               color: "text-accent-coral",
               bg: "bg-accent-coral/10",
-              title: "Anti-Massenproduzenten-Filter",
-              desc: "Filtert Mainstream-Hits heraus und findet Künstler mit hoher Qualität bei geringer Popularität – echte Perlen statt Fliessband.",
+              title: "Perlen-Filter",
+              desc: "Findet Künstler mit hoher Qualität bei geringer Bekanntheit – echte Trüffel für Ohren, die mehr wollen.",
             },
             {
               icon: Zap,
@@ -139,7 +133,7 @@ export function LandingPage() {
             <span>CuratedVibe © 2024</span>
           </div>
           <p className="text-white/25 text-xs">
-            Gebaut mit Leidenschaft für tiefgründige Musik
+            Erstellt für Musikberührte auf Trüffelsuche
           </p>
         </div>
       </footer>
