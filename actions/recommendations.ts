@@ -21,9 +21,10 @@ export async function generateRecommendations(limit = 12) {
     return await generateRecommendationsInternal(limit);
   } catch (e: any) {
     console.error("[generateRecommendations]", e);
+    // Temporär: genaue Ursache anzeigen, bis der Fehler gefunden ist
     return {
       success: false,
-      error: "Empfehlungen konnten nicht erstellt werden. Bitte erneut versuchen.",
+      error: `Fehler: ${e?.message ?? "Unbekannt"}`,
       items: [],
     };
   }
