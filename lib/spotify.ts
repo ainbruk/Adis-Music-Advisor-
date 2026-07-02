@@ -155,12 +155,14 @@ export async function searchArtistsByGenre(
   accessToken: string,
   genre: string,
   limit = 20,
-  refreshToken?: string
+  refreshToken?: string,
+  offset = 0
 ): Promise<SpotifyArtist[]> {
   const params = new URLSearchParams({
     q: `genre:"${genre}"`,
     type: "artist",
     limit: String(limit),
+    offset: String(offset),
   });
   const data = await spotifyFetch<{ artists: { items: SpotifyArtist[] } }>(
     `/search?${params}`,

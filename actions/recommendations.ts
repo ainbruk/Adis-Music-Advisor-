@@ -60,14 +60,28 @@ async function generateRecommendationsInternal(limit: number) {
 
   let candidates = [];
 
+  // Früher empfohlene Künstler merken, damit sich Empfehlungen nicht wiederholen
+  const previousRecs = await prisma.recommendation.findMany({
+    where: { userId },
+    select: { artistName: true },
+    orderBy: { createdAt: "desc" },
+    take: 300,
+  });
+  const alreadyRecommended = new Set<string>();
+  for (const r of previousRecs) {
+    for (const n of r.artistName.split(", "))
+      alreadyRecommended.add(n.toLowerCase());
+  }
+
   if (accessToken) {
     const [topArtists, topTracks] = await Promise.all([
       getTopArtists(accessToken, "medium_term", 50, refreshToken),
       getTopTracks(accessToken, "medium_term", 50, refreshToken),
     ]);
 
-    // Bereits bekannte Künstler: gehörte Top-Künstler + manuell gepflegte Liste
-    const knownArtists = new Set<string>();
+    // Bereits bekannte Künstler: gehörte Top-Künstler, manuell gepflegte Liste
+    // und alles, was schon einmal empfohlen wurde
+    const knownArtists = new Set<string>(alreadyRecommended);
     for (const a of topArtists) knownArtists.add(a.name.toLowerCase());
     for (const name of userPrefs.topArtists) knownArtists.add(name.toLowerCase());
 
@@ -88,11 +102,25 @@ async function generateRecommendationsInternal(limit: number) {
       preferredGenres.length > 0 ? preferredGenres : derivedGenres
     ).slice(0, 4);
 
-    // Neue Künstler über die Genre-Suche entdecken
+    // Neue Künstler über die Genre-Suche entdecken.
+    // Zufälliger Offset, damit jede Generierung andere Treffer liefert.
     const searchResults = await Promise.all(
-      discoveryGenres.map((g) =>
-        searchArtistsByGenre(accessToken, g, 20, refreshToken)
-      )
+      discoveryGenres.map(async (g) => {
+        const offset = Math.floor(Math.random() * 4) * 25;
+        const found = await searchArtistsByGenre(
+          accessToken,
+          g,
+          30,
+          refreshToken,
+          offset
+        );
+        // Spotify liefert oft keine Genres mehr – dann das Such-Genre übernehmen
+        return found.map((a) => ({
+          ...a,
+          genres:
+            Array.isArray(a.genres) && a.genres.length > 0 ? a.genres : [g],
+        }));
+      })
     );
     const seenIds = new Set<string>();
     const discovered = searchResults.flat().filter((a) => {
@@ -101,8 +129,28 @@ async function generateRecommendationsInternal(limit: number) {
       return true;
     });
 
+    // Genre-Zuordnung für Track-Kandidaten aus den Top-Künstlern ableiten
+    const artistGenreMap = new Map<string, string>();
+    for (const a of topArtists) {
+      const g = Array.isArray(a.genres) ? a.genres[0] : undefined;
+      if (g) artistGenreMap.set(a.name.toLowerCase(), g);
+    }
+    const fillGenre = <T extends { artistName: string; genre?: string }>(
+      cands: T[]
+    ): T[] =>
+      cands.map((c) =>
+        c.genre
+          ? c
+          : {
+              ...c,
+              genre: artistGenreMap.get(
+                (c.artistName.split(", ")[0] ?? "").toLowerCase()
+              ),
+            }
+      );
+
     const artistCandidates = filterAndScoreArtists(discovered, userPrefs);
-    const trackCandidates = filterAndScoreTracks(topTracks, userPrefs);
+    const trackCandidates = fillGenre(filterAndScoreTracks(topTracks, userPrefs));
 
     // Spotify-Recommendations-Endpoint (liefert bei neueren Apps nichts mehr)
     const seedArtistIds = topArtists
@@ -123,7 +171,7 @@ async function generateRecommendationsInternal(limit: number) {
           )
         : [];
 
-    const recCandidates = filterAndScoreTracks(spotifyRecs, userPrefs);
+    const recCandidates = fillGenre(filterAndScoreTracks(spotifyRecs, userPrefs));
 
     // Bekannte Künstler ausschliessen – Empfehlungen sollen Neuentdeckungen sein
     const isDiscovery = (c: { artistName: string }) =>
@@ -154,6 +202,15 @@ async function generateRecommendationsInternal(limit: number) {
     (c) => !profileArtists.has(c.artistName.toLowerCase())
   );
 
+  // Wiederholungen vermeiden – ausser es bliebe gar nichts mehr übrig
+  const fresh = candidates.filter(
+    (c) =>
+      !c.artistName
+        .split(", ")
+        .some((n) => alreadyRecommended.has(n.toLowerCase()))
+  );
+  if (fresh.length > 0) candidates = fresh;
+
   // Remove duplicates by artistName+trackName
   const seen = new Set<string>();
   const unique = candidates.filter((c) => {
@@ -163,7 +220,13 @@ async function generateRecommendationsInternal(limit: number) {
     return true;
   });
 
-  const top = unique.slice(0, limit);
+  // Aus den besten Kandidaten mischen, damit jede Generierung variiert
+  const pool = unique.slice(0, limit * 3);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const top = pool.slice(0, limit);
 
   // Persist to DB (upsert approach: delete old pending, insert new)
   await prisma.recommendation.deleteMany({
