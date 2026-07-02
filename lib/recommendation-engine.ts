@@ -218,7 +218,12 @@ export function filterAndScoreArtists(
       artistName: artist.name,
       genre,
       spotifyId: artist.id,
-      spotifyUrl: artist.external_urls.spotify,
+      // external_urls fehlt bei Suchergebnissen manchmal – URL aus der ID bauen
+      spotifyUrl:
+        artist.external_urls?.spotify ??
+        (artist.id
+          ? `https://open.spotify.com/artist/${artist.id}`
+          : undefined),
       coverUrl,
       popularity: artist.popularity,
       qualityScore,
@@ -283,7 +288,9 @@ export function filterAndScoreTracks(
       trackName: track.name,
       albumName: track.album.name,
       spotifyId: track.id,
-      spotifyUrl: track.external_urls.spotify,
+      spotifyUrl:
+        track.external_urls?.spotify ??
+        (track.id ? `https://open.spotify.com/track/${track.id}` : undefined),
       coverUrl,
       previewUrl: track.preview_url ?? undefined,
       popularity,

@@ -151,6 +151,19 @@ export async function getSpotifyRecommendations(
   return Array.isArray(data?.tracks) ? data!.tracks : [];
 }
 
+export async function getArtistTopTracks(
+  accessToken: string,
+  artistId: string,
+  refreshToken?: string
+): Promise<SpotifyTrack[]> {
+  const data = await spotifyFetch<{ tracks: SpotifyTrack[] }>(
+    `/artists/${artistId}/top-tracks?market=from_token`,
+    accessToken,
+    refreshToken
+  );
+  return Array.isArray(data?.tracks) ? data!.tracks : [];
+}
+
 export async function searchArtistsByGenre(
   accessToken: string,
   genre: string,

@@ -9,6 +9,7 @@ import {
   getTopTracks,
   getSpotifyRecommendations,
   searchArtistsByGenre,
+  getArtistTopTracks,
 } from "@/lib/spotify";
 import {
   filterAndScoreArtists,
@@ -149,7 +150,32 @@ async function generateRecommendationsInternal(limit: number) {
             }
       );
 
-    const artistCandidates = filterAndScoreArtists(discovered, userPrefs);
+    const scoredArtists = filterAndScoreArtists(discovered, userPrefs);
+
+    // Zu den besten neuen Künstlern einen konkreten Song holen
+    const artistCandidates = await Promise.all(
+      scoredArtists.slice(0, limit * 2).map(async (c) => {
+        if (!c.spotifyId) return c;
+        const tracks = await getArtistTopTracks(
+          accessToken,
+          c.spotifyId,
+          refreshToken
+        );
+        if (tracks.length === 0) return c;
+        const pick = tracks[Math.floor(Math.random() * Math.min(tracks.length, 5))];
+        return {
+          ...c,
+          trackName: pick.name,
+          albumName: pick.album?.name,
+          spotifyUrl: pick.external_urls?.spotify ?? c.spotifyUrl,
+          coverUrl:
+            (Array.isArray(pick.album?.images) && pick.album!.images[0]?.url) ||
+            c.coverUrl,
+          previewUrl: pick.preview_url ?? undefined,
+        };
+      })
+    );
+
     const trackCandidates = fillGenre(filterAndScoreTracks(topTracks, userPrefs));
 
     // Spotify-Recommendations-Endpoint (liefert bei neueren Apps nichts mehr)
@@ -337,6 +363,8 @@ function getCuratedDefaults(prefs: UserPreferences) {
 
   return defaults.map((d) => ({
     ...d,
+    // Such-Link statt hartcodierter Artist-ID – funktioniert garantiert
+    spotifyUrl: `https://open.spotify.com/search/${encodeURIComponent(d.artistName)}`,
     trackName: undefined,
     albumName: undefined,
     spotifyId: undefined,
