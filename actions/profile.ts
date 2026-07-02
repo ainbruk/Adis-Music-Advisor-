@@ -35,17 +35,22 @@ export async function updateProfile(data: ProfileFormData) {
   if (!parsed.success)
     return { success: false, error: "Ungültige Daten: " + parsed.error.message };
 
-  await prisma.userProfile.upsert({
-    where: { userId: session.user.id },
-    update: {
-      ...parsed.data,
-      updatedAt: new Date(),
-    },
-    create: {
-      userId: session.user.id,
-      ...parsed.data,
-    },
-  });
+  try {
+    await prisma.userProfile.upsert({
+      where: { userId: session.user.id },
+      update: {
+        ...parsed.data,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId: session.user.id,
+        ...parsed.data,
+      },
+    });
+  } catch (e) {
+    console.error("[updateProfile]", e);
+    return { success: false, error: "Profil konnte nicht gespeichert werden" };
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/profile");
@@ -58,19 +63,24 @@ export async function importSpotifyTopArtists(artists: { id: string; name: strin
 
   const artistNames = artists.map((a) => a.name);
 
-  await prisma.userProfile.upsert({
-    where: { userId: session.user.id },
-    update: {
-      topArtists: artistNames,
-      spotifyConnected: true,
-      updatedAt: new Date(),
-    },
-    create: {
-      userId: session.user.id,
-      topArtists: artistNames,
-      spotifyConnected: true,
-    },
-  });
+  try {
+    await prisma.userProfile.upsert({
+      where: { userId: session.user.id },
+      update: {
+        topArtists: artistNames,
+        spotifyConnected: true,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId: session.user.id,
+        topArtists: artistNames,
+        spotifyConnected: true,
+      },
+    });
+  } catch (e) {
+    console.error("[importSpotifyTopArtists]", e);
+    return { success: false, error: "Import konnte nicht gespeichert werden" };
+  }
 
   revalidatePath("/dashboard/profile");
   return { success: true, imported: artistNames.length };

@@ -78,16 +78,30 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
     });
   };
 
+  // Künstler-Änderungen sofort speichern – nicht erst beim "Profil speichern"
+  const persistArtists = (next: string[]) => {
+    startTransition(async () => {
+      const result = await updateProfile({ topArtists: next });
+      if (!result.success)
+        setSaveError(result.error ?? "Speichern fehlgeschlagen");
+    });
+  };
+
   const addArtist = () => {
     const trimmed = newArtist.trim();
     if (trimmed && !artists.includes(trimmed)) {
-      setArtists((prev) => [...prev, trimmed]);
+      const next = [...artists, trimmed];
+      setArtists(next);
+      persistArtists(next);
     }
     setNewArtist("");
   };
 
-  const removeArtist = (name: string) =>
-    setArtists((prev) => prev.filter((a) => a !== name));
+  const removeArtist = (name: string) => {
+    const next = artists.filter((a) => a !== name);
+    setArtists(next);
+    persistArtists(next);
+  };
 
   const toggleGenre = (g: string) =>
     setGenres((prev) =>
