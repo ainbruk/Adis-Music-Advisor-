@@ -151,6 +151,25 @@ export async function getSpotifyRecommendations(
   return Array.isArray(data?.tracks) ? data!.tracks : [];
 }
 
+export async function searchArtistsByGenre(
+  accessToken: string,
+  genre: string,
+  limit = 20,
+  refreshToken?: string
+): Promise<SpotifyArtist[]> {
+  const params = new URLSearchParams({
+    q: `genre:"${genre}"`,
+    type: "artist",
+    limit: String(limit),
+  });
+  const data = await spotifyFetch<{ artists: { items: SpotifyArtist[] } }>(
+    `/search?${params}`,
+    accessToken,
+    refreshToken
+  );
+  return Array.isArray(data?.artists?.items) ? data!.artists.items : [];
+}
+
 export async function searchArtist(
   accessToken: string,
   query: string,

@@ -8,6 +8,7 @@ import {
   getTopArtists,
   getTopTracks,
   getSpotifyRecommendations,
+  searchArtistsByGenre,
 } from "@/lib/spotify";
 import {
   filterAndScoreArtists,
@@ -65,18 +66,51 @@ async function generateRecommendationsInternal(limit: number) {
       getTopTracks(accessToken, "medium_term", 50, refreshToken),
     ]);
 
-    const artistCandidates = filterAndScoreArtists(topArtists, userPrefs);
+    // Bereits bekannte Künstler: gehörte Top-Künstler + manuell gepflegte Liste
+    const knownArtists = new Set<string>();
+    for (const a of topArtists) knownArtists.add(a.name.toLowerCase());
+    for (const name of userPrefs.topArtists) knownArtists.add(name.toLowerCase());
+
+    // Genres für die Entdeckung: bevorzugte Genres aus dem Profil,
+    // sonst die häufigsten Genres der gehörten Top-Künstler
+    const preferredGenres = Object.keys(
+      (profile?.genrePreferences ?? {}) as Record<string, number>
+    );
+    const genreCounts = new Map<string, number>();
+    for (const a of topArtists) {
+      const genres = Array.isArray(a.genres) ? a.genres : [];
+      for (const g of genres) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
+    }
+    const derivedGenres = Array.from(genreCounts.entries())
+      .sort((x, y) => y[1] - x[1])
+      .map(([g]) => g);
+    const discoveryGenres = (
+      preferredGenres.length > 0 ? preferredGenres : derivedGenres
+    ).slice(0, 4);
+
+    // Neue Künstler über die Genre-Suche entdecken
+    const searchResults = await Promise.all(
+      discoveryGenres.map((g) =>
+        searchArtistsByGenre(accessToken, g, 20, refreshToken)
+      )
+    );
+    const seenIds = new Set<string>();
+    const discovered = searchResults.flat().filter((a) => {
+      if (seenIds.has(a.id)) return false;
+      seenIds.add(a.id);
+      return true;
+    });
+
+    const artistCandidates = filterAndScoreArtists(discovered, userPrefs);
     const trackCandidates = filterAndScoreTracks(topTracks, userPrefs);
 
-    // Get Spotify recommendations based on seed artists
+    // Spotify-Recommendations-Endpoint (liefert bei neueren Apps nichts mehr)
     const seedArtistIds = topArtists
       .filter((a) => a.popularity < userPrefs.popularityThreshold)
       .slice(0, 2)
       .map((a) => a.id);
 
-    const seedGenres = Object.keys(genreWeights)
-      .filter((g) => (genreWeights[g] ?? 1) > 0.9)
-      .slice(0, 3);
+    const seedGenres = discoveryGenres.slice(0, 3);
 
     const spotifyRecs =
       seedArtistIds.length > 0 || seedGenres.length > 0
@@ -91,11 +125,17 @@ async function generateRecommendationsInternal(limit: number) {
 
     const recCandidates = filterAndScoreTracks(spotifyRecs, userPrefs);
 
+    // Bekannte Künstler ausschliessen – Empfehlungen sollen Neuentdeckungen sein
+    const isDiscovery = (c: { artistName: string }) =>
+      !c.artistName
+        .split(", ")
+        .some((n) => knownArtists.has(n.toLowerCase()));
+
     candidates = [
       ...applyFeedbackAdjustment(artistCandidates, artistWeights, genreWeights),
       ...applyFeedbackAdjustment(recCandidates, artistWeights, genreWeights),
       ...applyFeedbackAdjustment(trackCandidates, artistWeights, genreWeights),
-    ];
+    ].filter(isDiscovery);
   } else {
     // No Spotify connection: use curated underground defaults
     candidates = getCuratedDefaults(userPrefs);
@@ -105,6 +145,14 @@ async function generateRecommendationsInternal(limit: number) {
   if (candidates.length === 0) {
     candidates = getCuratedDefaults(userPrefs);
   }
+
+  // Auch aus dem Fallback keine Künstler empfehlen, die schon im Profil stehen
+  const profileArtists = new Set(
+    userPrefs.topArtists.map((a) => a.toLowerCase())
+  );
+  candidates = candidates.filter(
+    (c) => !profileArtists.has(c.artistName.toLowerCase())
+  );
 
   // Remove duplicates by artistName+trackName
   const seen = new Set<string>();
