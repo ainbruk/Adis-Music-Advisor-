@@ -17,11 +17,25 @@ import {
 } from "@/lib/recommendation-engine";
 
 export async function generateRecommendations(limit = 12) {
+  try {
+    return await generateRecommendationsInternal(limit);
+  } catch (e: any) {
+    console.error("[generateRecommendations]", e);
+    return {
+      success: false,
+      error: "Empfehlungen konnten nicht erstellt werden. Bitte erneut versuchen.",
+      items: [],
+    };
+  }
+}
+
+async function generateRecommendationsInternal(limit: number) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { success: false, error: "Nicht authentifiziert", items: [] };
 
   const userId = session.user.id;
   const accessToken = (session as any).accessToken as string | undefined;
+  const refreshToken = (session as any).refreshToken as string | undefined;
 
   const profile = await prisma.userProfile.findUnique({
     where: { userId },
@@ -43,8 +57,8 @@ export async function generateRecommendations(limit = 12) {
 
   if (accessToken) {
     const [topArtists, topTracks] = await Promise.all([
-      getTopArtists(accessToken, "medium_term", 50),
-      getTopTracks(accessToken, "medium_term", 50),
+      getTopArtists(accessToken, "medium_term", 50, refreshToken),
+      getTopTracks(accessToken, "medium_term", 50, refreshToken),
     ]);
 
     const artistCandidates = filterAndScoreArtists(topArtists, userPrefs);
@@ -62,10 +76,13 @@ export async function generateRecommendations(limit = 12) {
 
     const spotifyRecs =
       seedArtistIds.length > 0 || seedGenres.length > 0
-        ? await getSpotifyRecommendations(accessToken, seedArtistIds, seedGenres, {
-            maxPopularity: userPrefs.popularityThreshold,
-            limit: 20,
-          })
+        ? await getSpotifyRecommendations(
+            accessToken,
+            seedArtistIds,
+            seedGenres,
+            { maxPopularity: userPrefs.popularityThreshold, limit: 20 },
+            refreshToken
+          )
         : [];
 
     const recCandidates = filterAndScoreTracks(spotifyRecs, userPrefs);
@@ -77,6 +94,11 @@ export async function generateRecommendations(limit = 12) {
     ];
   } else {
     // No Spotify connection: use curated underground defaults
+    candidates = getCuratedDefaults(userPrefs);
+  }
+
+  // Fallback: Spotify lieferte nichts (z.B. neues Konto, Token abgelaufen)
+  if (candidates.length === 0) {
     candidates = getCuratedDefaults(userPrefs);
   }
 
