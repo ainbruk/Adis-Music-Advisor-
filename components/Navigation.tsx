@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Music2,
   User2,
+  History,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -26,6 +27,7 @@ interface NavProps {
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Übersicht", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/recommendations", label: "Empfehlungen", icon: Music2, exact: false },
+  { href: "/dashboard/history", label: "Verlauf", icon: History, exact: false },
   { href: "/dashboard/profile", label: "Mein Profil", icon: User2, exact: false },
 ];
 
