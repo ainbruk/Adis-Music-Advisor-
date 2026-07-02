@@ -10,24 +10,31 @@ interface Props {
   hasSpotify: boolean;
 }
 
-const GENRES = [
-  "Alle",
-  "ambient",
-  "experimental",
-  "deep house",
-  "melodic techno",
-  "post-rock",
-  "shoegaze",
-  "neo-soul",
-  "drone",
-  "darkwave",
-];
-
 export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
   const [recs, setRecs] = useState(initialRecs);
   const [activeGenre, setActiveGenre] = useState("Alle");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
+
+  // Filter-Chips dynamisch aus den vorhandenen Empfehlungen ableiten
+  const genreCounts = new Map<string, number>();
+  for (const r of recs) {
+    const g = r.genre?.toLowerCase();
+    if (g) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
+  }
+  const genreOptions = [
+    "Alle",
+    ...Array.from(genreCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([g]) => g)
+      .slice(0, 14),
+  ];
+
+  // Falls das aktive Genre nach einer Neugenerierung nicht mehr vorkommt
+  const effectiveGenre =
+    activeGenre !== "Alle" && !genreCounts.has(activeGenre)
+      ? "Alle"
+      : activeGenre;
 
   const handleGenerate = () => {
     setError("");
@@ -49,11 +56,9 @@ export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
   };
 
   const filtered =
-    activeGenre === "Alle"
+    effectiveGenre === "Alle"
       ? recs
-      : recs.filter(
-          (r) => r.genre?.toLowerCase().includes(activeGenre.toLowerCase())
-        );
+      : recs.filter((r) => r.genre?.toLowerCase() === effectiveGenre);
 
   const undergroundCount = recs.filter((r) => {
     const tags = Array.isArray(r.tags) ? r.tags : [];
@@ -92,26 +97,31 @@ export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
         </div>
       )}
 
-      {/* Genre Filter */}
-      <div className="flex gap-2 flex-wrap mb-6">
-        <Filter className="w-4 h-4 text-white/30 self-center" />
-        {GENRES.map((g) => (
-          <button
-            key={g}
-            onClick={() => setActiveGenre(g)}
-            className={`
-              px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border
-              ${
-                activeGenre === g
-                  ? "bg-brand-600/30 border-brand-500/50 text-brand-200"
-                  : "bg-white/5 border-white/10 text-white/45 hover:text-white/70 hover:border-white/20"
-              }
-            `}
-          >
-            {g}
-          </button>
-        ))}
-      </div>
+      {/* Genre Filter – zeigt die Genres der aktuellen Empfehlungen */}
+      {genreOptions.length > 1 && (
+        <div className="flex gap-2 flex-wrap mb-6">
+          <Filter className="w-4 h-4 text-white/30 self-center" />
+          {genreOptions.map((g) => (
+            <button
+              key={g}
+              onClick={() => setActiveGenre(g)}
+              className={`
+                px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border
+                ${
+                  effectiveGenre === g
+                    ? "bg-brand-600/30 border-brand-500/50 text-brand-200"
+                    : "bg-white/5 border-white/10 text-white/45 hover:text-white/70 hover:border-white/20"
+                }
+              `}
+            >
+              {g}
+              {g !== "Alle" && (
+                <span className="ml-1.5 text-white/30">{genreCounts.get(g)}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Empty state */}
       {filtered.length === 0 && (
