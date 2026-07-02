@@ -3,8 +3,10 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import SpotifyProvider from "next-auth/providers/spotify";
 import { prisma } from "@/lib/prisma";
 
-// NEXTAUTH_URL immer aus VERCEL_URL ableiten – überschreibt falsche Env-Werte
-if (process.env.VERCEL_URL) {
+// Stabile Production-URL bevorzugen, damit Spotify-Callback nach jedem Redeploy gleich bleibt
+if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+  process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+} else if (process.env.VERCEL_URL) {
   process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
 }
 
