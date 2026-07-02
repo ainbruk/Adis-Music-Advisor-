@@ -31,6 +31,9 @@ export async function GET(request: Request) {
     spotify_client_id: process.env.SPOTIFY_CLIENT_ID
       ? process.env.SPOTIFY_CLIENT_ID.slice(0, 6) + "..."
       : "FEHLT",
+    spotify_client_secret: process.env.SPOTIFY_CLIENT_SECRET
+      ? process.env.SPOTIFY_CLIENT_SECRET.slice(0, 4) + "..."
+      : "FEHLT",
     nextauth_secret: process.env.NEXTAUTH_SECRET ? "OK" : "FEHLT",
     database_url: process.env.DATABASE_URL ? "OK" : "FEHLT",
     session_ok: sessionOk,
