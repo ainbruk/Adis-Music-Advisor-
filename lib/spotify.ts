@@ -88,7 +88,7 @@ export async function getTopArtists(
     accessToken,
     refreshToken
   );
-  return data?.items ?? [];
+  return Array.isArray(data?.items) ? data!.items : [];
 }
 
 export async function getTopTracks(
@@ -102,7 +102,7 @@ export async function getTopTracks(
     accessToken,
     refreshToken
   );
-  return data?.items ?? [];
+  return Array.isArray(data?.items) ? data!.items : [];
 }
 
 export async function getRecentlyPlayed(
@@ -148,7 +148,7 @@ export async function getSpotifyRecommendations(
     accessToken,
     refreshToken
   );
-  return data?.tracks ?? [];
+  return Array.isArray(data?.tracks) ? data!.tracks : [];
 }
 
 export async function searchArtist(

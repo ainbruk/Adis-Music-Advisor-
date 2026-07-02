@@ -111,9 +111,8 @@ function computeQualityScore(
 
   // Boost if artist is in user's top list
   const artistLower = artist.name.toLowerCase();
-  const inTopList = userPrefs.topArtists.some(
-    (a) => a.toLowerCase() === artistLower
-  );
+  const topList = Array.isArray(userPrefs.topArtists) ? userPrefs.topArtists : [];
+  const inTopList = topList.some((a) => a.toLowerCase() === artistLower);
   if (inTopList) score += 0.3;
 
   // Apply user's artist weight (feedback-adjusted)
@@ -176,9 +175,19 @@ export function filterAndScoreArtists(
   );
 
   const candidates: RecommendationCandidate[] = [];
+  const topArtists = Array.isArray(userPrefs.topArtists)
+    ? userPrefs.topArtists
+    : [];
 
-  for (const artist of artists) {
-    const isInTopList = userPrefs.topArtists.some(
+  for (const rawArtist of artists) {
+    // Spotify liefert genres/images nicht immer – defensiv absichern
+    const artist = {
+      ...rawArtist,
+      genres: Array.isArray(rawArtist.genres) ? rawArtist.genres : [],
+      images: Array.isArray(rawArtist.images) ? rawArtist.images : [],
+      followers: rawArtist.followers ?? { total: 0 },
+    };
+    const isInTopList = topArtists.some(
       (a) => a.toLowerCase() === artist.name.toLowerCase()
     );
 
@@ -241,7 +250,18 @@ export function filterAndScoreTracks(
 ): RecommendationCandidate[] {
   const candidates: RecommendationCandidate[] = [];
 
-  for (const track of tracks) {
+  for (const rawTrack of tracks) {
+    // Spotify liefert album/artists nicht immer vollständig – defensiv absichern
+    const track = {
+      ...rawTrack,
+      artists: Array.isArray(rawTrack.artists) ? rawTrack.artists : [],
+      album: {
+        ...(rawTrack.album ?? { id: "", name: "", release_date: "" }),
+        images: Array.isArray(rawTrack.album?.images)
+          ? rawTrack.album.images
+          : [],
+      },
+    };
     if (track.popularity > userPrefs.popularityThreshold) continue;
 
     const popularity = track.popularity;

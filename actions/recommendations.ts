@@ -22,9 +22,10 @@ export async function generateRecommendations(limit = 12) {
   } catch (e: any) {
     console.error("[generateRecommendations]", e);
     // Temporär: genaue Ursache anzeigen, bis der Fehler gefunden ist
+    const stackTop = (e?.stack ?? "").split("\n").slice(0, 3).join(" | ");
     return {
       success: false,
-      error: `Fehler: ${e?.message ?? "Unbekannt"}`,
+      error: `Fehler: ${e?.message ?? "Unbekannt"} [${stackTop}]`,
       items: [],
     };
   }
@@ -47,7 +48,9 @@ async function generateRecommendationsInternal(limit: number) {
 
   const userPrefs: UserPreferences = {
     popularityThreshold: profile?.popularityThreshold ?? 70,
-    topArtists: (profile?.topArtists ?? []) as string[],
+    topArtists: Array.isArray(profile?.topArtists)
+      ? (profile!.topArtists as string[])
+      : [],
     genreWeights,
     artistWeights,
     currentMood: profile?.currentMood ?? undefined,
