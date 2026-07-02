@@ -22,6 +22,11 @@ const SPOTIFY_SCOPES = [
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
+  logger: {
+    error(code, metadata) {
+      console.error("[NextAuth]", code, JSON.stringify(metadata));
+    },
+  },
   providers: [
     SpotifyProvider({
       clientId: process.env.SPOTIFY_CLIENT_ID ?? "",
