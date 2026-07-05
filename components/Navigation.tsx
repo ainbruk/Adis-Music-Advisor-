@@ -13,7 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 interface NavProps {
@@ -33,7 +33,12 @@ const NAV_ITEMS = [
 
 export function Navigation({ user }: NavProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  // Zugeklappt starten – auf dem Desktop nach dem Laden automatisch öffnen
+  const [collapsed, setCollapsed] = useState(true);
+
+  useEffect(() => {
+    if (window.innerWidth >= 1024) setCollapsed(false);
+  }, []);
 
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
