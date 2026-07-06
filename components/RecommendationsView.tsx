@@ -1,18 +1,44 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Sparkles, RefreshCw, Filter, Music2, TrendingDown } from "lucide-react";
+import {
+  Sparkles,
+  RefreshCw,
+  Filter,
+  Music2,
+  TrendingDown,
+  Heart,
+  Disc3,
+} from "lucide-react";
 import { generateRecommendations } from "@/actions/recommendations";
+import { updateProfile } from "@/actions/profile";
 import { RecommendationCard } from "@/components/RecommendationCard";
 
 interface Props {
   initialRecs: any[];
   hasSpotify: boolean;
+  initialMood?: string;
 }
 
-export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
+const MOODS = [
+  "Melancholisch",
+  "Verträumt",
+  "Nachdenklich",
+  "Ruhig",
+  "Dunkel",
+  "Energisch",
+  "Groovy",
+  "Euphorisch",
+];
+
+export function RecommendationsView({
+  initialRecs,
+  hasSpotify,
+  initialMood = "",
+}: Props) {
   const [recs, setRecs] = useState(initialRecs);
   const [activeGenre, setActiveGenre] = useState("Alle");
+  const [mood, setMood] = useState(initialMood);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
@@ -36,22 +62,35 @@ export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
       ? "Alle"
       : activeGenre;
 
+  const runGeneration = async () => {
+    const result = await generateRecommendations(12);
+    if (result.success) {
+      setRecs((prev) => {
+        const newIds = new Set(result.items.map((r: any) => r.id));
+        const merged = [
+          ...result.items,
+          ...prev.filter((r) => !newIds.has(r.id)),
+        ];
+        return merged.slice(0, 24);
+      });
+    } else {
+      setError(result.error ?? "Fehler bei der Generierung");
+    }
+  };
+
   const handleGenerate = () => {
     setError("");
+    startTransition(runGeneration);
+  };
+
+  // Stimmung wählen → speichern → direkt passende Empfehlungen generieren
+  const selectMood = (m: string) => {
+    const next = mood === m ? "" : m;
+    setMood(next);
+    setError("");
     startTransition(async () => {
-      const result = await generateRecommendations(12);
-      if (result.success) {
-        setRecs((prev) => {
-          const newIds = new Set(result.items.map((r: any) => r.id));
-          const merged = [
-            ...result.items,
-            ...prev.filter((r) => !newIds.has(r.id)),
-          ];
-          return merged.slice(0, 24);
-        });
-      } else {
-        setError(result.error ?? "Fehler bei der Generierung");
-      }
+      await updateProfile({ currentMood: next });
+      if (next) await runGeneration();
     });
   };
 
@@ -96,6 +135,28 @@ export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
           {error}
         </div>
       )}
+
+      {/* Stimmung – steuert die nächste Generierung */}
+      <div className="flex gap-2 flex-wrap mb-4">
+        <Heart className="w-4 h-4 text-white/30 self-center" />
+        {MOODS.map((m) => (
+          <button
+            key={m}
+            onClick={() => selectMood(m)}
+            disabled={isPending}
+            className={`
+              px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border disabled:opacity-50
+              ${
+                mood === m
+                  ? "bg-accent-pink/20 border-accent-pink/40 text-accent-pink"
+                  : "bg-white/5 border-white/10 text-white/45 hover:text-white/70 hover:border-white/20"
+              }
+            `}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
 
       {/* Genre Filter – zeigt die Genres der aktuellen Empfehlungen */}
       {genreOptions.length > 1 && (
@@ -148,6 +209,29 @@ export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
       {/* Grid */}
       {filtered.length > 0 && (
         <>
+          {/* Neuerscheinungen */}
+          {filtered.some((r) => {
+            const tags = Array.isArray(r.tags) ? r.tags : [];
+            return tags.includes("new-release");
+          }) && (
+            <section className="mb-8">
+              <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2 mb-4">
+                <Disc3 className="w-4 h-4 text-accent-teal" />
+                Neu erschienen – von deinen Künstlern
+              </h2>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filtered
+                  .filter((r) => {
+                    const tags = Array.isArray(r.tags) ? r.tags : [];
+                    return tags.includes("new-release");
+                  })
+                  .map((rec) => (
+                    <RecommendationCard key={rec.id} rec={rec} />
+                  ))}
+              </div>
+            </section>
+          )}
+
           {/* Underground section */}
           {filtered.some((r) => {
             const tags = Array.isArray(r.tags) ? r.tags : [];
@@ -174,7 +258,7 @@ export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
           {/* All other recommendations */}
           {filtered.some((r) => {
             const tags = Array.isArray(r.tags) ? r.tags : [];
-            return !tags.includes("underground-gem");
+            return !tags.includes("underground-gem") && !tags.includes("new-release");
           }) && (
             <section>
               <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-4">
@@ -184,7 +268,7 @@ export function RecommendationsView({ initialRecs, hasSpotify }: Props) {
                 {filtered
                   .filter((r) => {
                     const tags = Array.isArray(r.tags) ? r.tags : [];
-                    return !tags.includes("underground-gem");
+                    return !tags.includes("underground-gem") && !tags.includes("new-release");
                   })
                   .map((rec) => (
                     <RecommendationCard key={rec.id} rec={rec} />

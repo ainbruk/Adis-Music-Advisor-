@@ -28,6 +28,15 @@ export interface SpotifyRecommendation {
   tracks: SpotifyTrack[];
 }
 
+export interface SpotifyAlbum {
+  id: string;
+  name: string;
+  release_date: string;
+  images: { url: string; width: number; height: number }[];
+  external_urls: { spotify: string };
+  album_type: string;
+}
+
 async function refreshAccessToken(refreshToken: string): Promise<string | null> {
   const basic = Buffer.from(
     `${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`
@@ -149,6 +158,26 @@ export async function getSpotifyRecommendations(
     refreshToken
   );
   return Array.isArray(data?.tracks) ? data!.tracks : [];
+}
+
+export async function getArtistLatestAlbum(
+  accessToken: string,
+  artistId: string,
+  refreshToken?: string
+): Promise<SpotifyAlbum | null> {
+  const data = await spotifyFetch<{ items: SpotifyAlbum[] }>(
+    `/artists/${artistId}/albums?include_groups=album&limit=5`,
+    accessToken,
+    refreshToken
+  );
+  const items = Array.isArray(data?.items) ? data!.items : [];
+  if (items.length === 0) return null;
+  // Neuestes Album zuerst
+  return items
+    .slice()
+    .sort((a, b) =>
+      (b.release_date ?? "").localeCompare(a.release_date ?? "")
+    )[0];
 }
 
 export async function getArtistTopTracks(

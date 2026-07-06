@@ -55,6 +55,55 @@ const UNDERGROUND_GENRE_BONUS: Record<string, number> = {
   "doom metal":          0.84,
 };
 
+// Stimmung → Genres: übersetzt die Profil-Stimmung in Such-Genres,
+// damit die Entdeckung wirklich der Stimmung folgt (deutsch + englisch)
+const MOOD_GENRE_MAP: { keywords: string[]; genres: string[] }[] = [
+  {
+    keywords: ["melanchol", "traurig", "sad", "wehmüt", "bittersweet", "sehnsucht", "longing"],
+    genres: ["singer-songwriter", "slowcore", "chamber pop", "indie folk"],
+  },
+  {
+    keywords: ["verträumt", "dream", "ethereal", "schweb"],
+    genres: ["dream pop", "shoegaze", "ethereal wave"],
+  },
+  {
+    keywords: ["nachdenklich", "introspek", "tief", "deep", "profound", "thoughtful"],
+    genres: ["modern classical", "neo-classical", "slowcore", "ambient"],
+  },
+  {
+    keywords: ["ruhig", "calm", "entspann", "chill", "sanft", "soft"],
+    genres: ["ambient", "downtempo", "lo-fi"],
+  },
+  {
+    keywords: ["dunkel", "dark", "düster", "brooding", "moody"],
+    genres: ["darkwave", "dark ambient", "industrial", "doom metal"],
+  },
+  {
+    keywords: ["energisch", "energetic", "treibend", "driving", "kraftvoll", "powerful", "intens"],
+    genres: ["techno", "drum and bass", "post-punk"],
+  },
+  {
+    keywords: ["groov", "funky", "tanzbar", "danceable"],
+    genres: ["funk", "disco", "deep house", "afrobeat"],
+  },
+  {
+    keywords: ["euphor", "uplifting", "happy", "froh", "hell"],
+    genres: ["progressive house", "trance", "synth-pop"],
+  },
+];
+
+export function moodToGenres(mood?: string, aesthetic?: string): string[] {
+  const text = `${mood ?? ""} ${aesthetic ?? ""}`.toLowerCase();
+  if (!text.trim()) return [];
+  const genres: string[] = [];
+  for (const { keywords, genres: gs } of MOOD_GENRE_MAP) {
+    if (keywords.some((k) => text.includes(k))) {
+      for (const g of gs) if (!genres.includes(g)) genres.push(g);
+    }
+  }
+  return genres;
+}
+
 function extractMoodKeywords(mood?: string, aesthetic?: string): string[] {
   const text = `${mood ?? ""} ${aesthetic ?? ""}`.toLowerCase();
   const keywords: string[] = [];

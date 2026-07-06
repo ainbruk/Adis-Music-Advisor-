@@ -10,12 +10,15 @@ import {
   getSpotifyRecommendations,
   searchArtistsByGenre,
   getArtistTopTracks,
+  getArtistLatestAlbum,
 } from "@/lib/spotify";
 import {
   filterAndScoreArtists,
   filterAndScoreTracks,
   applyFeedbackAdjustment,
+  moodToGenres,
   type UserPreferences,
+  type RecommendationCandidate,
 } from "@/lib/recommendation-engine";
 
 export async function generateRecommendations(limit = 12) {
@@ -64,15 +67,24 @@ async function generateRecommendationsInternal(limit: number) {
   // Früher empfohlene Künstler merken, damit sich Empfehlungen nicht wiederholen
   const previousRecs = await prisma.recommendation.findMany({
     where: { userId },
-    select: { artistName: true },
+    select: { artistName: true, albumName: true },
     orderBy: { createdAt: "desc" },
     take: 300,
   });
   const alreadyRecommended = new Set<string>();
+  const alreadyRecommendedAlbums = new Set<string>();
   for (const r of previousRecs) {
     for (const n of r.artistName.split(", "))
       alreadyRecommended.add(n.toLowerCase());
+    if (r.albumName)
+      alreadyRecommendedAlbums.add(
+        `${r.artistName}::${r.albumName}`.toLowerCase()
+      );
   }
+
+  // Neuerscheinungen von bekannten Künstlern – eigene Kategorie,
+  // vom Ausschluss bekannter Künstler ausgenommen
+  let newReleaseCandidates: RecommendationCandidate[] = [];
 
   if (accessToken) {
     const [topArtists, topTracks] = await Promise.all([
@@ -99,9 +111,25 @@ async function generateRecommendationsInternal(limit: number) {
     const derivedGenres = Array.from(genreCounts.entries())
       .sort((x, y) => y[1] - x[1])
       .map(([g]) => g);
-    const discoveryGenres = (
+
+    // Profil-Genres zufällig mischen, damit bei vielen Genres
+    // jede Generierung andere Ecken durchsucht
+    const baseGenres = (
       preferredGenres.length > 0 ? preferredGenres : derivedGenres
-    ).slice(0, 4);
+    ).slice();
+    for (let i = baseGenres.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [baseGenres[i], baseGenres[j]] = [baseGenres[j], baseGenres[i]];
+    }
+
+    // Stimmung übersetzt sich in Genres und hat Vorrang
+    const moodGenres = moodToGenres(
+      userPrefs.currentMood,
+      userPrefs.aestheticText
+    );
+    const discoveryGenres = Array.from(
+      new Set(moodGenres.slice(0, 3).concat(baseGenres))
+    ).slice(0, 6);
 
     // Neue Künstler über die Genre-Suche entdecken.
     // Zufälliger Offset, damit jede Generierung andere Treffer liefert.
@@ -149,6 +177,38 @@ async function generateRecommendationsInternal(limit: number) {
               ),
             }
       );
+
+    // Neue Alben (letzte 6 Monate) der meistgehörten Künstler prüfen
+    const releaseCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
+    const checkArtists = topArtists.slice(0, 12);
+    const latestAlbums = await Promise.all(
+      checkArtists.map((a) =>
+        getArtistLatestAlbum(accessToken, a.id, refreshToken)
+      )
+    );
+    latestAlbums.forEach((album, i) => {
+      if (!album) return;
+      const released = Date.parse(album.release_date ?? "");
+      if (isNaN(released) || released < releaseCutoff) return;
+      const artist = checkArtists[i];
+      const key = `${artist.name}::${album.name}`.toLowerCase();
+      if (alreadyRecommendedAlbums.has(key)) return;
+      newReleaseCandidates.push({
+        artistName: artist.name,
+        albumName: album.name,
+        genre: Array.isArray(artist.genres) ? artist.genres[0] : undefined,
+        spotifyId: album.id,
+        spotifyUrl:
+          album.external_urls?.spotify ??
+          `https://open.spotify.com/album/${album.id}`,
+        coverUrl: Array.isArray(album.images) ? album.images[0]?.url ?? "" : "",
+        popularity: artist.popularity,
+        qualityScore: 0.9,
+        undergroundScore: 0.3,
+        reason: `Neues Album «${album.name}» von einem deiner Künstler`,
+        tags: ["new-release"],
+      });
+    });
 
     const scoredArtists = filterAndScoreArtists(discovered, userPrefs);
 
@@ -236,6 +296,10 @@ async function generateRecommendationsInternal(limit: number) {
         .some((n) => alreadyRecommended.has(n.toLowerCase()))
   );
   if (fresh.length > 0) candidates = fresh;
+
+  // Neuerscheinungen dazu (max. 3 pro Generierung) – sie umgehen bewusst
+  // den Ausschluss bekannter Künstler
+  candidates = newReleaseCandidates.slice(0, 3).concat(candidates);
 
   // Remove duplicates by artistName+trackName
   const seen = new Set<string>();
