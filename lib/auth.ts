@@ -15,6 +15,7 @@ const SPOTIFY_SCOPES = [
   "user-read-private",
   "user-top-read",
   "user-library-read",
+  "user-follow-read",
   "playlist-read-private",
   "playlist-read-collaborative",
   "user-read-recently-played",

@@ -9,6 +9,7 @@ import {
   TrendingDown,
   Heart,
   Disc3,
+  BookmarkX,
 } from "lucide-react";
 import { generateRecommendations } from "@/actions/recommendations";
 import { updateProfile } from "@/actions/profile";
@@ -39,6 +40,7 @@ export function RecommendationsView({
   const [recs, setRecs] = useState(initialRecs);
   const [activeGenre, setActiveGenre] = useState("Alle");
   const [mood, setMood] = useState(initialMood);
+  const [excludeSaved, setExcludeSaved] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
@@ -63,7 +65,7 @@ export function RecommendationsView({
       : activeGenre;
 
   const runGeneration = async () => {
-    const result = await generateRecommendations(12);
+    const result = await generateRecommendations(12, { excludeSaved });
     if (result.success) {
       setRecs((prev) => {
         const newIds = new Set(result.items.map((r: any) => r.id));
@@ -135,6 +137,28 @@ export function RecommendationsView({
           {error}
         </div>
       )}
+
+      {/* Bibliothek-Filter – steuert die nächste Generierung */}
+      <div className="flex gap-2 flex-wrap mb-4">
+        <BookmarkX className="w-4 h-4 text-white/30 self-center" />
+        <button
+          onClick={() => setExcludeSaved((v) => !v)}
+          disabled={isPending}
+          title="Gefolgte Künstler und Künstler deiner gespeicherten Songs ausschliessen"
+          className={`
+            px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border disabled:opacity-50
+            ${
+              excludeSaved
+                ? "bg-accent-teal/15 border-accent-teal/40 text-accent-teal"
+                : "bg-white/5 border-white/10 text-white/45 hover:text-white/70 hover:border-white/20"
+            }
+          `}
+        >
+          {excludeSaved
+            ? "Ohne gespeicherte Künstler ✓"
+            : "Gespeicherte Künstler erlaubt"}
+        </button>
+      </div>
 
       {/* Stimmung – steuert die nächste Generierung */}
       <div className="flex gap-2 flex-wrap mb-4">

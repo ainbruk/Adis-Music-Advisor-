@@ -11,6 +11,8 @@ import {
   searchArtistsByGenre,
   getArtistTopTracks,
   getArtistLatestAlbum,
+  getFollowedArtists,
+  getSavedTrackArtistNames,
 } from "@/lib/spotify";
 import {
   filterAndScoreArtists,
@@ -21,9 +23,15 @@ import {
   type RecommendationCandidate,
 } from "@/lib/recommendation-engine";
 
-export async function generateRecommendations(limit = 12) {
+export async function generateRecommendations(
+  limit = 12,
+  options?: { excludeSaved?: boolean }
+) {
   try {
-    return await generateRecommendationsInternal(limit);
+    return await generateRecommendationsInternal(
+      limit,
+      options?.excludeSaved ?? true
+    );
   } catch (e: any) {
     console.error("[generateRecommendations]", e);
     // Temporär: genaue Ursache anzeigen, bis der Fehler gefunden ist
@@ -36,7 +44,10 @@ export async function generateRecommendations(limit = 12) {
   }
 }
 
-async function generateRecommendationsInternal(limit: number) {
+async function generateRecommendationsInternal(
+  limit: number,
+  excludeSaved: boolean
+) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { success: false, error: "Nicht authentifiziert", items: [] };
 
@@ -87,16 +98,26 @@ async function generateRecommendationsInternal(limit: number) {
   let newReleaseCandidates: RecommendationCandidate[] = [];
 
   if (accessToken) {
-    const [topArtists, topTracks] = await Promise.all([
-      getTopArtists(accessToken, "medium_term", 50, refreshToken),
-      getTopTracks(accessToken, "medium_term", 50, refreshToken),
-    ]);
+    const [topArtists, topTracks, followedArtists, savedArtistNames] =
+      await Promise.all([
+        getTopArtists(accessToken, "medium_term", 50, refreshToken),
+        getTopTracks(accessToken, "medium_term", 50, refreshToken),
+        excludeSaved
+          ? getFollowedArtists(accessToken, refreshToken)
+          : Promise.resolve([]),
+        excludeSaved
+          ? getSavedTrackArtistNames(accessToken, refreshToken)
+          : Promise.resolve([]),
+      ]);
 
-    // Bereits bekannte Künstler: gehörte Top-Künstler, manuell gepflegte Liste
-    // und alles, was schon einmal empfohlen wurde
+    // Bereits bekannte Künstler: gehörte Top-Künstler, manuell gepflegte Liste,
+    // alles bereits Empfohlene – und optional die Spotify-Bibliothek
+    // (gefolgte Künstler + Künstler gespeicherter Songs)
     const knownArtists = new Set<string>(alreadyRecommended);
     for (const a of topArtists) knownArtists.add(a.name.toLowerCase());
     for (const name of userPrefs.topArtists) knownArtists.add(name.toLowerCase());
+    for (const a of followedArtists) knownArtists.add(a.name.toLowerCase());
+    for (const n of savedArtistNames) knownArtists.add(n.toLowerCase());
 
     // Genres für die Entdeckung: bevorzugte Genres aus dem Profil,
     // sonst die häufigsten Genres der gehörten Top-Künstler
@@ -178,9 +199,17 @@ async function generateRecommendationsInternal(limit: number) {
             }
       );
 
-    // Neue Alben (letzte 6 Monate) der meistgehörten Künstler prüfen
+    // Neue Alben (letzte 6 Monate) der meistgehörten und gefolgten Künstler prüfen
     const releaseCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
-    const checkArtists = topArtists.slice(0, 12);
+    const releaseSeen = new Set<string>();
+    const checkArtists = topArtists
+      .concat(followedArtists)
+      .filter((a) => {
+        if (releaseSeen.has(a.id)) return false;
+        releaseSeen.add(a.id);
+        return true;
+      })
+      .slice(0, 20);
     const latestAlbums = await Promise.all(
       checkArtists.map((a) =>
         getArtistLatestAlbum(accessToken, a.id, refreshToken)

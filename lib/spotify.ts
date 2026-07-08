@@ -160,6 +160,60 @@ export async function getSpotifyRecommendations(
   return Array.isArray(data?.tracks) ? data!.tracks : [];
 }
 
+// Gefolgte Künstler (Bibliothek > Künstler). Benötigt Scope user-follow-read –
+// fehlt der Scope beim Token, kommt einfach eine leere Liste zurück.
+export async function getFollowedArtists(
+  accessToken: string,
+  refreshToken?: string,
+  max = 150
+): Promise<SpotifyArtist[]> {
+  const out: SpotifyArtist[] = [];
+  let after: string | undefined;
+
+  while (out.length < max) {
+    const params = new URLSearchParams({ type: "artist", limit: "50" });
+    if (after) params.set("after", after);
+    const data = await spotifyFetch<{
+      artists: { items: SpotifyArtist[]; cursors?: { after?: string | null } };
+    }>(`/me/following?${params}`, accessToken, refreshToken);
+
+    const items = Array.isArray(data?.artists?.items)
+      ? data!.artists.items
+      : [];
+    if (items.length === 0) break;
+    out.push(...items);
+    after = data?.artists?.cursors?.after ?? undefined;
+    if (!after) break;
+  }
+
+  return out;
+}
+
+// Künstler der zuletzt gespeicherten Songs (Bibliothek > Titel)
+export async function getSavedTrackArtistNames(
+  accessToken: string,
+  refreshToken?: string,
+  pages = 2
+): Promise<string[]> {
+  const names: string[] = [];
+
+  for (let i = 0; i < pages; i++) {
+    const data = await spotifyFetch<{ items: { track: SpotifyTrack }[] }>(
+      `/me/tracks?limit=50&offset=${i * 50}`,
+      accessToken,
+      refreshToken
+    );
+    const items = Array.isArray(data?.items) ? data!.items : [];
+    for (const it of items) {
+      const artists = Array.isArray(it.track?.artists) ? it.track.artists : [];
+      for (const a of artists) if (a?.name) names.push(a.name);
+    }
+    if (items.length < 50) break;
+  }
+
+  return names;
+}
+
 export async function getArtistLatestAlbum(
   accessToken: string,
   artistId: string,
