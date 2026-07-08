@@ -10,7 +10,6 @@ import {
   getSpotifyRecommendations,
   searchArtistsByGenre,
   getArtistTopTracks,
-  getArtistLatestAlbum,
   getFollowedArtists,
   getSavedTrackArtistNames,
 } from "@/lib/spotify";
@@ -20,7 +19,6 @@ import {
   applyFeedbackAdjustment,
   moodToGenres,
   type UserPreferences,
-  type RecommendationCandidate,
 } from "@/lib/recommendation-engine";
 
 export async function generateRecommendations(
@@ -78,24 +76,15 @@ async function generateRecommendationsInternal(
   // Früher empfohlene Künstler merken, damit sich Empfehlungen nicht wiederholen
   const previousRecs = await prisma.recommendation.findMany({
     where: { userId },
-    select: { artistName: true, albumName: true },
+    select: { artistName: true },
     orderBy: { createdAt: "desc" },
     take: 300,
   });
   const alreadyRecommended = new Set<string>();
-  const alreadyRecommendedAlbums = new Set<string>();
   for (const r of previousRecs) {
     for (const n of r.artistName.split(", "))
       alreadyRecommended.add(n.toLowerCase());
-    if (r.albumName)
-      alreadyRecommendedAlbums.add(
-        `${r.artistName}::${r.albumName}`.toLowerCase()
-      );
   }
-
-  // Neuerscheinungen von bekannten Künstlern – eigene Kategorie,
-  // vom Ausschluss bekannter Künstler ausgenommen
-  let newReleaseCandidates: RecommendationCandidate[] = [];
 
   if (accessToken) {
     const [topArtists, topTracks, followedArtists, savedArtistNames] =
@@ -199,46 +188,6 @@ async function generateRecommendationsInternal(
             }
       );
 
-    // Neue Alben (letzte 6 Monate) der meistgehörten und gefolgten Künstler prüfen
-    const releaseCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
-    const releaseSeen = new Set<string>();
-    const checkArtists = topArtists
-      .concat(followedArtists)
-      .filter((a) => {
-        if (releaseSeen.has(a.id)) return false;
-        releaseSeen.add(a.id);
-        return true;
-      })
-      .slice(0, 20);
-    const latestAlbums = await Promise.all(
-      checkArtists.map((a) =>
-        getArtistLatestAlbum(accessToken, a.id, refreshToken)
-      )
-    );
-    latestAlbums.forEach((album, i) => {
-      if (!album) return;
-      const released = Date.parse(album.release_date ?? "");
-      if (isNaN(released) || released < releaseCutoff) return;
-      const artist = checkArtists[i];
-      const key = `${artist.name}::${album.name}`.toLowerCase();
-      if (alreadyRecommendedAlbums.has(key)) return;
-      newReleaseCandidates.push({
-        artistName: artist.name,
-        albumName: album.name,
-        genre: Array.isArray(artist.genres) ? artist.genres[0] : undefined,
-        spotifyId: album.id,
-        spotifyUrl:
-          album.external_urls?.spotify ??
-          `https://open.spotify.com/album/${album.id}`,
-        coverUrl: Array.isArray(album.images) ? album.images[0]?.url ?? "" : "",
-        popularity: artist.popularity,
-        qualityScore: 0.9,
-        undergroundScore: 0.3,
-        reason: `Neues Album «${album.name}» von einem deiner Künstler`,
-        tags: ["new-release"],
-      });
-    });
-
     const scoredArtists = filterAndScoreArtists(discovered, userPrefs);
 
     // Zu den besten neuen Künstlern einen konkreten Song holen
@@ -325,10 +274,6 @@ async function generateRecommendationsInternal(
         .some((n) => alreadyRecommended.has(n.toLowerCase()))
   );
   if (fresh.length > 0) candidates = fresh;
-
-  // Neuerscheinungen dazu (max. 3 pro Generierung) – sie umgehen bewusst
-  // den Ausschluss bekannter Künstler
-  candidates = newReleaseCandidates.slice(0, 3).concat(candidates);
 
   // Remove duplicates by artistName+trackName
   const seen = new Set<string>();

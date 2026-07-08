@@ -6,9 +6,8 @@ import {
   RefreshCw,
   Filter,
   Music2,
-  TrendingDown,
+  History,
   Heart,
-  Disc3,
   BookmarkX,
 } from "lucide-react";
 import { generateRecommendations } from "@/actions/recommendations";
@@ -41,6 +40,8 @@ export function RecommendationsView({
   const [activeGenre, setActiveGenre] = useState("Alle");
   const [mood, setMood] = useState(initialMood);
   const [excludeSaved, setExcludeSaved] = useState(true);
+  // IDs der zuletzt generierten Empfehlungen – für die Trennung neu/früher
+  const [latestIds, setLatestIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
@@ -67,8 +68,9 @@ export function RecommendationsView({
   const runGeneration = async () => {
     const result = await generateRecommendations(12, { excludeSaved });
     if (result.success) {
+      const newIds = new Set<string>(result.items.map((r: any) => r.id));
+      setLatestIds(newIds);
       setRecs((prev) => {
-        const newIds = new Set(result.items.map((r: any) => r.id));
         const merged = [
           ...result.items,
           ...prev.filter((r) => !newIds.has(r.id)),
@@ -230,25 +232,18 @@ export function RecommendationsView({
         </div>
       )}
 
-      {/* Grid */}
+      {/* Grid – neueste Generierung getrennt von früheren Empfehlungen */}
       {filtered.length > 0 && (
         <>
-          {/* Neuerscheinungen */}
-          {filtered.some((r) => {
-            const tags = Array.isArray(r.tags) ? r.tags : [];
-            return tags.includes("new-release");
-          }) && (
+          {filtered.some((r) => latestIds.has(r.id)) && (
             <section className="mb-8">
               <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2 mb-4">
-                <Disc3 className="w-4 h-4 text-accent-teal" />
-                Neu erschienen – von deinen Künstlern
+                <Sparkles className="w-4 h-4 text-brand-400" />
+                Neu generiert
               </h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filtered
-                  .filter((r) => {
-                    const tags = Array.isArray(r.tags) ? r.tags : [];
-                    return tags.includes("new-release");
-                  })
+                  .filter((r) => latestIds.has(r.id))
                   .map((rec) => (
                     <RecommendationCard key={rec.id} rec={rec} />
                   ))}
@@ -256,44 +251,15 @@ export function RecommendationsView({
             </section>
           )}
 
-          {/* Underground section */}
-          {filtered.some((r) => {
-            const tags = Array.isArray(r.tags) ? r.tags : [];
-            return tags.includes("underground-gem");
-          }) && (
-            <section className="mb-8">
-              <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2 mb-4">
-                <TrendingDown className="w-4 h-4 text-brand-400" />
-                Underground-Perlen
-              </h2>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filtered
-                  .filter((r) => {
-                    const tags = Array.isArray(r.tags) ? r.tags : [];
-                    return tags.includes("underground-gem");
-                  })
-                  .map((rec) => (
-                    <RecommendationCard key={rec.id} rec={rec} />
-                  ))}
-              </div>
-            </section>
-          )}
-
-          {/* All other recommendations */}
-          {filtered.some((r) => {
-            const tags = Array.isArray(r.tags) ? r.tags : [];
-            return !tags.includes("underground-gem") && !tags.includes("new-release");
-          }) && (
+          {filtered.some((r) => !latestIds.has(r.id)) && (
             <section>
-              <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-4">
-                Weitere Empfehlungen
+              <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2 mb-4">
+                <History className="w-4 h-4 text-white/30" />
+                {latestIds.size > 0 ? "Frühere Empfehlungen" : "Empfehlungen"}
               </h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filtered
-                  .filter((r) => {
-                    const tags = Array.isArray(r.tags) ? r.tags : [];
-                    return !tags.includes("underground-gem") && !tags.includes("new-release");
-                  })
+                  .filter((r) => !latestIds.has(r.id))
                   .map((rec) => (
                     <RecommendationCard key={rec.id} rec={rec} />
                   ))}
