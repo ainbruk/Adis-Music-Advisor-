@@ -189,13 +189,13 @@ export async function getFollowedArtists(
   return out;
 }
 
-// Künstler der zuletzt gespeicherten Songs (Bibliothek > Titel)
-export async function getSavedTrackArtistNames(
+// Zuletzt gespeicherte Songs (Bibliothek > Titel)
+export async function getSavedTracks(
   accessToken: string,
   refreshToken?: string,
   pages = 2
-): Promise<string[]> {
-  const names: string[] = [];
+): Promise<SpotifyTrack[]> {
+  const out: SpotifyTrack[] = [];
 
   for (let i = 0; i < pages; i++) {
     const data = await spotifyFetch<{ items: { track: SpotifyTrack }[] }>(
@@ -204,14 +204,48 @@ export async function getSavedTrackArtistNames(
       refreshToken
     );
     const items = Array.isArray(data?.items) ? data!.items : [];
-    for (const it of items) {
-      const artists = Array.isArray(it.track?.artists) ? it.track.artists : [];
-      for (const a of artists) if (a?.name) names.push(a.name);
-    }
+    for (const it of items) if (it?.track?.id) out.push(it.track);
     if (items.length < 50) break;
   }
 
-  return names;
+  return out;
+}
+
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  tracks?: { total: number };
+}
+
+// Eigene und gefolgte (verlinkte) Playlists
+export async function getUserPlaylists(
+  accessToken: string,
+  refreshToken?: string,
+  limit = 30
+): Promise<SpotifyPlaylist[]> {
+  const data = await spotifyFetch<{ items: SpotifyPlaylist[] }>(
+    `/me/playlists?limit=${limit}`,
+    accessToken,
+    refreshToken
+  );
+  return Array.isArray(data?.items) ? data!.items.filter(Boolean) : [];
+}
+
+export async function getPlaylistTracks(
+  accessToken: string,
+  playlistId: string,
+  refreshToken?: string,
+  limit = 50
+): Promise<SpotifyTrack[]> {
+  const data = await spotifyFetch<{ items: { track: SpotifyTrack | null }[] }>(
+    `/playlists/${playlistId}/tracks?limit=${limit}`,
+    accessToken,
+    refreshToken
+  );
+  const items = Array.isArray(data?.items) ? data!.items : [];
+  return items
+    .map((i) => i?.track)
+    .filter((t): t is SpotifyTrack => !!t && !!t.id);
 }
 
 export async function getArtistLatestAlbum(

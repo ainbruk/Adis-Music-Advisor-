@@ -11,7 +11,9 @@ import {
   searchArtistsByGenre,
   getArtistTopTracks,
   getFollowedArtists,
-  getSavedTrackArtistNames,
+  getSavedTracks,
+  getUserPlaylists,
+  getPlaylistTracks,
   searchArtist,
 } from "@/lib/spotify";
 import {
@@ -143,17 +145,21 @@ async function generateRecommendationsInternal(
   }
 
   if (accessToken) {
-    const [topArtists, topTracks, followedArtists, savedArtistNames] =
+    const [topArtists, topTracks, followedArtists, savedTracks] =
       await Promise.all([
         getTopArtists(accessToken, "medium_term", 50, refreshToken),
         getTopTracks(accessToken, "medium_term", 50, refreshToken),
         excludeSaved
           ? getFollowedArtists(accessToken, refreshToken)
           : Promise.resolve([]),
-        excludeSaved
-          ? getSavedTrackArtistNames(accessToken, refreshToken)
-          : Promise.resolve([]),
+        getSavedTracks(accessToken, refreshToken),
       ]);
+
+    const savedArtistNames = excludeSaved
+      ? savedTracks.flatMap((t) =>
+          (Array.isArray(t.artists) ? t.artists : []).map((a) => a.name)
+        )
+      : [];
 
     // Bereits bekannte Künstler: gehörte Top-Künstler, manuell gepflegte Liste,
     // alles bereits Empfohlene – und optional die Spotify-Bibliothek
@@ -279,11 +285,64 @@ async function generateRecommendationsInternal(
         .split(", ")
         .some((n) => knownArtists.has(n.toLowerCase()));
 
+    // Playlists durchforsten: unbekannte Künstler aus eigenen und
+    // gefolgten Playlists (2–3 zufällige pro Generierung)
+    let playlistCandidates: typeof trackCandidates = [];
+    if (!seed) {
+      try {
+        const playlists = await getUserPlaylists(accessToken, refreshToken);
+        for (let i = playlists.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [playlists[i], playlists[j]] = [playlists[j], playlists[i]];
+        }
+        const picked = playlists.slice(0, 3);
+        const plTracks = await Promise.all(
+          picked.map((p) => getPlaylistTracks(accessToken, p.id, refreshToken))
+        );
+        picked.forEach((p, i) => {
+          const scored = fillGenre(filterAndScoreTracks(plTracks[i], userPrefs));
+          for (const c of scored.slice(0, 8)) {
+            playlistCandidates.push({
+              ...c,
+              reason: `Aus deiner Playlist «${p.name}»`,
+              tags: c.tags.concat("aus-playlist"),
+            });
+          }
+        });
+      } catch (e) {
+        console.error("[playlistCandidates]", e);
+      }
+    }
+
+    // Bibliothek durchforsten: gespeicherte, wenig populäre Songs von
+    // Künstlern, die du kaum hörst – vergessene Perlen (bewusst nicht
+    // vom Bekannt-Filter ausgeschlossen)
+    const activeArtistNames = new Set(
+      topArtists.map((a) => a.name.toLowerCase())
+    );
+    const libraryCandidates = seed
+      ? []
+      : fillGenre(filterAndScoreTracks(savedTracks, userPrefs))
+          .filter(
+            (c) =>
+              !c.artistName
+                .split(", ")
+                .some((n) => activeArtistNames.has(n.toLowerCase()))
+          )
+          .slice(0, 6)
+          .map((c) => ({
+            ...c,
+            reason: "Vergessene Perle aus deiner Bibliothek",
+            tags: c.tags.concat("aus-bibliothek"),
+          }));
+
     candidates = [
-      ...applyFeedbackAdjustment(artistCandidates, artistWeights, genreWeights),
-      ...applyFeedbackAdjustment(recCandidates, artistWeights, genreWeights),
-      ...applyFeedbackAdjustment(trackCandidates, artistWeights, genreWeights),
-    ].filter(isDiscovery);
+      ...applyFeedbackAdjustment(playlistCandidates, artistWeights, genreWeights).filter(isDiscovery).slice(0, 10),
+      ...applyFeedbackAdjustment(libraryCandidates, artistWeights, genreWeights).slice(0, 4),
+      ...applyFeedbackAdjustment(artistCandidates, artistWeights, genreWeights).filter(isDiscovery),
+      ...applyFeedbackAdjustment(recCandidates, artistWeights, genreWeights).filter(isDiscovery),
+      ...applyFeedbackAdjustment(trackCandidates, artistWeights, genreWeights).filter(isDiscovery),
+    ];
   } else {
     // No Spotify connection: use curated underground defaults
     candidates = getCuratedDefaults(userPrefs);
