@@ -12,7 +12,6 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { submitFeedback } from "@/actions/feedback";
-import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { ShareCard } from "@/components/ShareCard";
 
 interface Rec {
@@ -30,7 +29,11 @@ interface Rec {
   undergroundScore?: number | null;
   reason?: string | null;
   tags?: string[] | string | null;
-  feedback?: { positive: boolean; reason?: string | null } | null;
+  feedback?: {
+    positive: boolean;
+    rating?: number | null;
+    reason?: string | null;
+  } | null;
 }
 
 function parseTags(tags: any): string[] {
@@ -50,19 +53,21 @@ export function RecommendationCard({
   compact?: boolean;
 }) {
   const [feedback, setFeedback] = useState(rec.feedback ?? null);
-  const [showFeedback, setShowFeedback] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const tags = parseTags(rec.tags);
   const underground = tags.includes("underground-gem");
 
-  const handleQuickFeedback = async (positive: boolean) => {
+  const handleRating = async (rating: number) => {
     if (feedback || submitting) return;
     setSubmitting(true);
-    const result = await submitFeedback({ recommendationId: rec.id, positive });
-    if (result.success) setFeedback({ positive });
+    const result = await submitFeedback({ recommendationId: rec.id, rating });
+    if (result.success) setFeedback({ positive: rating >= 6, rating });
     setSubmitting(false);
   };
+
+  const ratingColor = (r: number) =>
+    r >= 6 ? "text-[#1DB954]" : r <= 4 ? "text-red-400" : "text-white/60";
 
   const undergroundPct = Math.round((rec.undergroundScore ?? 0) * 100);
   const popularityPct = rec.popularity ?? 0;
@@ -125,7 +130,13 @@ export function RecommendationCard({
                 ${feedback.positive ? "bg-[#1DB954]/20 border border-[#1DB954]/40" : "bg-red-500/20 border border-red-500/40"}
               `}
             >
-              {feedback.positive ? (
+              {feedback.rating != null ? (
+                <span
+                  className={`text-xs font-bold ${ratingColor(feedback.rating)}`}
+                >
+                  {feedback.rating}
+                </span>
+              ) : feedback.positive ? (
                 <ThumbsUp className="w-3.5 h-3.5 text-[#1DB954]" />
               ) : (
                 <ThumbsDown className="w-3.5 h-3.5 text-red-400" />
@@ -190,6 +201,33 @@ export function RecommendationCard({
             </div>
           )}
 
+          {/* Bewertung 0–10 */}
+          {!compact && !feedback && (
+            <div className="mb-3">
+              <p className="text-white/30 text-[10px] uppercase tracking-wider mb-1.5">
+                Bewertung (0–10)
+              </p>
+              <div className="flex gap-1 flex-wrap">
+                {Array.from({ length: 11 }, (_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleRating(i)}
+                    disabled={submitting}
+                    className="w-6 h-6 rounded-md bg-white/5 border border-white/10 hover:bg-brand-600/40 hover:border-brand-500/50 text-white/50 hover:text-white text-[11px] font-medium transition-colors disabled:opacity-40"
+                  >
+                    {i}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!compact && feedback?.rating != null && (
+            <p className={`text-xs font-medium mb-3 ${ratingColor(feedback.rating)}`}>
+              Deine Bewertung: {feedback.rating}/10
+            </p>
+          )}
+
           {/* Actions */}
           <div className="flex items-center gap-2 flex-wrap">
             {rec.spotifyUrl && (
@@ -205,62 +243,16 @@ export function RecommendationCard({
             )}
 
             {!compact && (
-              <>
-                <button
-                  onClick={() => handleQuickFeedback(true)}
-                  disabled={!!feedback || submitting}
-                  className={`
-                    flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-                    ${
-                      feedback?.positive === true
-                        ? "bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/30"
-                        : "bg-white/5 hover:bg-[#1DB954]/10 text-white/50 hover:text-[#1DB954] disabled:opacity-40"
-                    }
-                  `}
-                >
-                  <ThumbsUp className="w-3 h-3" />
-                  Trifft zu
-                </button>
-
-                <button
-                  onClick={() => setShowFeedback(true)}
-                  disabled={!!feedback || submitting}
-                  className={`
-                    flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-                    ${
-                      feedback?.positive === false
-                        ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                        : "bg-white/5 hover:bg-red-500/10 text-white/50 hover:text-red-400 disabled:opacity-40"
-                    }
-                  `}
-                >
-                  <ThumbsDown className="w-3 h-3" />
-                  Passt nicht
-                </button>
-
-                <button
-                  onClick={() => setShowShare(true)}
-                  className="ml-auto p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/30 hover:text-white/70 transition-colors"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                </button>
-              </>
+              <button
+                onClick={() => setShowShare(true)}
+                className="ml-auto p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/30 hover:text-white/70 transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
         </div>
       </article>
-
-      {showFeedback && (
-        <FeedbackPanel
-          recommendationId={rec.id}
-          artistName={rec.artistName}
-          onClose={() => setShowFeedback(false)}
-          onSubmit={(result) => {
-            setFeedback({ positive: false, reason: result.reason });
-            setShowFeedback(false);
-          }}
-        />
-      )}
 
       {showShare && (
         <ShareCard

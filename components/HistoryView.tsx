@@ -13,6 +13,7 @@ import {
 interface FeedbackEntry {
   id: string;
   positive: boolean;
+  rating?: number | null;
   reason?: string | null;
   category?: string | null;
   createdAt: string | Date;
@@ -181,7 +182,15 @@ export function HistoryView({ feedbacks }: { feedbacks: FeedbackEntry[] }) {
                         }
                       `}
                     >
-                      {f.positive ? (
+                      {f.rating != null ? (
+                        <span
+                          className={`text-xs font-bold ${
+                            f.positive ? "text-[#1DB954]" : "text-red-400"
+                          }`}
+                        >
+                          {f.rating}
+                        </span>
+                      ) : f.positive ? (
                         <ThumbsUp className="w-3.5 h-3.5 text-[#1DB954]" />
                       ) : (
                         <ThumbsDown className="w-3.5 h-3.5 text-red-400" />

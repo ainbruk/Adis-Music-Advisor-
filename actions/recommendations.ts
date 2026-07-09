@@ -188,32 +188,7 @@ async function generateRecommendationsInternal(
             }
       );
 
-    const scoredArtists = filterAndScoreArtists(discovered, userPrefs);
-
-    // Zu den besten neuen Künstlern einen konkreten Song holen
-    const artistCandidates = await Promise.all(
-      scoredArtists.slice(0, limit * 2).map(async (c) => {
-        if (!c.spotifyId) return c;
-        const tracks = await getArtistTopTracks(
-          accessToken,
-          c.spotifyId,
-          refreshToken
-        );
-        if (tracks.length === 0) return c;
-        const pick = tracks[Math.floor(Math.random() * Math.min(tracks.length, 5))];
-        return {
-          ...c,
-          trackName: pick.name,
-          albumName: pick.album?.name,
-          spotifyUrl: pick.external_urls?.spotify ?? c.spotifyUrl,
-          coverUrl:
-            (Array.isArray(pick.album?.images) && pick.album!.images[0]?.url) ||
-            c.coverUrl,
-          previewUrl: pick.preview_url ?? undefined,
-        };
-      })
-    );
-
+    const artistCandidates = filterAndScoreArtists(discovered, userPrefs);
     const trackCandidates = fillGenre(filterAndScoreTracks(topTracks, userPrefs));
 
     // Spotify-Recommendations-Endpoint (liefert bei neueren Apps nichts mehr)
@@ -290,7 +265,38 @@ async function generateRecommendationsInternal(
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  const top = pool.slice(0, limit);
+  let top = pool.slice(0, limit);
+
+  // Jeder Künstler-Empfehlung einen konkreten Song zuordnen –
+  // bevorzugt die weniger populären der Top-Tracks (Deep Cuts)
+  if (accessToken) {
+    top = await Promise.all(
+      top.map(async (c) => {
+        if (c.trackName || !c.spotifyId) return c;
+        const tracks = await getArtistTopTracks(
+          accessToken,
+          c.spotifyId,
+          refreshToken
+        );
+        if (tracks.length === 0) return c;
+        const deepCuts = tracks
+          .slice()
+          .sort((a, b) => (a.popularity ?? 0) - (b.popularity ?? 0))
+          .slice(0, 3);
+        const pick = deepCuts[Math.floor(Math.random() * deepCuts.length)];
+        return {
+          ...c,
+          trackName: pick.name,
+          albumName: pick.album?.name,
+          spotifyUrl: pick.external_urls?.spotify ?? c.spotifyUrl,
+          coverUrl:
+            (Array.isArray(pick.album?.images) && pick.album!.images[0]?.url) ||
+            c.coverUrl,
+          previewUrl: pick.preview_url ?? undefined,
+        };
+      })
+    );
+  }
 
   // Persist to DB (upsert approach: delete old pending, insert new)
   await prisma.recommendation.deleteMany({

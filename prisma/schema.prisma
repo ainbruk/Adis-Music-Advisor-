@@ -104,6 +104,7 @@ model Feedback {
   userId           String
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   positive         Boolean
+  rating           Int?
   reason           String?
   category         String?
   createdAt        DateTime       @default(now())

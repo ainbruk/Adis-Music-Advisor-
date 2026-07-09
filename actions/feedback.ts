@@ -6,16 +6,17 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const FeedbackSchema = z.object({
-  recommendationId: z.string().min(1),
-  positive: z.boolean(),
-  reason: z.string().max(500).optional(),
-  category: z.string().max(100).optional(),
-});
-
-const POSITIVE_WEIGHT = 1.3;
-const NEGATIVE_WEIGHT = 0.6;
-const ADJUSTMENT_STEP = 0.15;
+const FeedbackSchema = z
+  .object({
+    recommendationId: z.string().min(1),
+    positive: z.boolean().optional(),
+    rating: z.number().int().min(0).max(10).optional(),
+    reason: z.string().max(500).optional(),
+    category: z.string().max(100).optional(),
+  })
+  .refine((d) => d.positive !== undefined || d.rating !== undefined, {
+    message: "Bewertung fehlt",
+  });
 
 export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
   const session = await getServerSession(authOptions);
@@ -26,7 +27,9 @@ export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
   if (!parsed.success)
     return { success: false, error: parsed.error.message };
 
-  const { recommendationId, positive, reason, category } = parsed.data;
+  const { recommendationId, rating, reason, category } = parsed.data;
+  // 0–10-Skala: ab 6 gilt als positiv; ohne Rating zählt der Daumen
+  const positive = parsed.data.positive ?? (rating ?? 5) >= 6;
   const userId = session.user.id;
 
   const recommendation = await prisma.recommendation.findUnique({
@@ -37,8 +40,8 @@ export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
 
   await prisma.feedback.upsert({
     where: { recommendationId },
-    update: { positive, reason, category },
-    create: { recommendationId, userId, positive, reason, category },
+    update: { positive, rating, reason, category },
+    create: { recommendationId, userId, positive, rating, reason, category },
   });
 
   // Adjust artist and genre weights in the profile
@@ -53,27 +56,19 @@ export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
   const currentArtistWeight = artistWeights[artistKey] ?? 1.0;
   const currentGenreWeight = genreWeights[genreKey] ?? 1.0;
 
-  if (positive) {
-    artistWeights[artistKey] = Math.min(
+  // Stärke der Anpassung: Rating 0 → -1, 5 → 0, 10 → +1 (Daumen: ±1)
+  const factor =
+    rating !== undefined ? (rating - 5) / 5 : positive ? 1 : -1;
+
+  artistWeights[artistKey] = Math.min(
+    2.0,
+    Math.max(0.1, currentArtistWeight + 0.2 * factor)
+  );
+  if (genreKey)
+    genreWeights[genreKey] = Math.min(
       2.0,
-      currentArtistWeight + ADJUSTMENT_STEP
+      Math.max(0.2, currentGenreWeight + 0.1 * factor)
     );
-    if (genreKey)
-      genreWeights[genreKey] = Math.min(
-        2.0,
-        currentGenreWeight + ADJUSTMENT_STEP * 0.5
-      );
-  } else {
-    artistWeights[artistKey] = Math.max(
-      0.1,
-      currentArtistWeight - ADJUSTMENT_STEP
-    );
-    if (genreKey)
-      genreWeights[genreKey] = Math.max(
-        0.2,
-        currentGenreWeight - ADJUSTMENT_STEP * 0.3
-      );
-  }
 
   await prisma.userProfile.upsert({
     where: { userId },
