@@ -195,12 +195,24 @@ export function RecommendationCard({
 
         {/* Content */}
         <div className="p-4">
-          {/* Genre tag */}
-          {rec.genre && (
-            <span className="inline-block px-2 py-0.5 rounded-md bg-brand-500/15 text-brand-300 text-xs font-medium mb-2">
-              {rec.genre}
-            </span>
-          )}
+          {/* Genre- und Quellen-Tags */}
+          <div className="flex flex-wrap gap-1.5 mb-2 empty:mb-0">
+            {rec.genre && (
+              <span className="inline-block px-2 py-0.5 rounded-md bg-brand-500/15 text-brand-300 text-xs font-medium">
+                {rec.genre}
+              </span>
+            )}
+            {tags.includes("aus-playlist") && (
+              <span className="inline-block px-2 py-0.5 rounded-md bg-accent-teal/15 text-accent-teal text-xs font-medium">
+                Playlist
+              </span>
+            )}
+            {tags.includes("aus-bibliothek") && (
+              <span className="inline-block px-2 py-0.5 rounded-md bg-accent-yellow/15 text-accent-yellow text-xs font-medium">
+                Bibliothek
+              </span>
+            )}
+          </div>
 
           <h3 className="font-semibold text-white text-base leading-snug mb-0.5">
             {rec.artistName}

@@ -12,6 +12,7 @@ import {
   Archive,
   ChevronDown,
   ChevronRight,
+  ListMusic,
 } from "lucide-react";
 import {
   generateRecommendations,
@@ -148,6 +149,19 @@ export function RecommendationsView({
     return tags.includes("underground-gem");
   }).length;
 
+  // Sektionen: neueste Generierung / Funde aus Playlists & Bibliothek / Rest
+  const hasTag = (r: any, tag: string) =>
+    Array.isArray(r.tags) && r.tags.includes(tag);
+  const isFromCollection = (r: any) =>
+    hasTag(r, "aus-playlist") || hasTag(r, "aus-bibliothek");
+  const latestList = filtered.filter((r) => latestIds.has(r.id));
+  const collectionFinds = filtered.filter(
+    (r) => !latestIds.has(r.id) && isFromCollection(r)
+  );
+  const olderList = filtered.filter(
+    (r) => !latestIds.has(r.id) && !isFromCollection(r)
+  );
+
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto">
       {/* Header */}
@@ -273,49 +287,65 @@ export function RecommendationsView({
         </div>
       )}
 
-      {/* Grid – neueste Generierung getrennt von früheren Empfehlungen */}
+      {/* Grid – neueste Generierung / Playlist- & Bibliotheks-Funde / frühere */}
       {filtered.length > 0 && (
         <>
-          {filtered.some((r) => latestIds.has(r.id)) && (
+          {latestList.length > 0 && (
             <section className="mb-8">
               <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2 mb-4">
                 <Sparkles className="w-4 h-4 text-brand-400" />
                 Neu generiert
               </h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filtered
-                  .filter((r) => latestIds.has(r.id))
-                  .map((rec) => (
-                    <RecommendationCard
-                      key={rec.id}
-                      rec={rec}
-                      onRated={handleRated}
-                      onDismiss={handleDismiss}
-                      onSimilar={handleSimilar}
-                    />
-                  ))}
+                {latestList.map((rec) => (
+                  <RecommendationCard
+                    key={rec.id}
+                    rec={rec}
+                    onRated={handleRated}
+                    onDismiss={handleDismiss}
+                    onSimilar={handleSimilar}
+                  />
+                ))}
               </div>
             </section>
           )}
 
-          {filtered.some((r) => !latestIds.has(r.id)) && (
+          {collectionFinds.length > 0 && (
+            <section className="mb-8">
+              <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2 mb-4">
+                <ListMusic className="w-4 h-4 text-accent-teal" />
+                Aus deinen Playlists & deiner Bibliothek
+              </h2>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {collectionFinds.map((rec) => (
+                  <RecommendationCard
+                    key={rec.id}
+                    rec={rec}
+                    onRated={handleRated}
+                    onDismiss={handleDismiss}
+                    onSimilar={handleSimilar}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {olderList.length > 0 && (
             <section>
               <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2 mb-4">
                 <History className="w-4 h-4 text-white/30" />
                 {latestIds.size > 0 ? "Frühere Empfehlungen" : "Empfehlungen"}
               </h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filtered
-                  .filter((r) => !latestIds.has(r.id))
-                  .map((rec) => (
-                    <RecommendationCard
-                      key={rec.id}
-                      rec={rec}
-                      onRated={handleRated}
-                      onDismiss={handleDismiss}
-                      onSimilar={handleSimilar}
-                    />
-                  ))}
+                {olderList.map((rec) => (
+                  <RecommendationCard
+                    key={rec.id}
+                    rec={rec}
+                    onRated={handleRated}
+                    onDismiss={handleDismiss}
+                    onSimilar={handleSimilar}
+                  />
+                ))}
               </div>
             </section>
           )}
