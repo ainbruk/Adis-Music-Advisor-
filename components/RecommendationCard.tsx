@@ -31,6 +31,17 @@ interface Rec {
   undergroundScore?: number | null;
   reason?: string | null;
   tags?: string[] | string | null;
+  scoreDetails?: {
+    score?: number;
+    quality?: number;
+    underground?: number;
+    popularity?: number | null;
+    artistWeight?: number;
+    genreWeight?: number;
+    genrePreferred?: boolean;
+    moodMatch?: boolean;
+    source?: string;
+  } | null;
   feedback?: {
     positive: boolean;
     rating?: number | null;
@@ -77,6 +88,7 @@ export function RecommendationCard({
   const [feedback, setFeedback] = useState(rec.feedback ?? null);
   const [pendingRating, setPendingRating] = useState<number | null>(null);
   const [showShare, setShowShare] = useState(false);
+  const [showWhy, setShowWhy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const tags = parseTags(rec.tags);
   const underground = tags.includes("underground-gem");
@@ -226,9 +238,75 @@ export function RecommendationCard({
 
           {/* Reason */}
           {rec.reason && !compact && (
-            <p className="text-white/40 text-xs leading-relaxed mt-2 mb-3 line-clamp-2">
+            <p className="text-white/40 text-xs leading-relaxed mt-2 mb-2 line-clamp-2">
               {rec.reason}
             </p>
+          )}
+
+          {/* Warum diese Empfehlung? – Score-Aufschlüsselung */}
+          {rec.scoreDetails && !compact && (
+            <div className="mb-3">
+              <button
+                onClick={() => setShowWhy((v) => !v)}
+                className="text-[11px] text-brand-300/60 hover:text-brand-300 transition-colors"
+              >
+                {showWhy ? "Details ausblenden ▴" : "Warum diese Empfehlung? ▾"}
+              </button>
+              {showWhy && (
+                <ul className="mt-2 space-y-1 text-[11px] text-white/45 bg-white/[0.03] rounded-lg p-2.5 border border-white/5">
+                  {rec.scoreDetails.score != null && (
+                    <li className="flex justify-between">
+                      <span>Gesamt-Score</span>
+                      <span className="text-brand-300 font-medium">
+                        {rec.scoreDetails.score}/100
+                      </span>
+                    </li>
+                  )}
+                  {rec.scoreDetails.quality != null && (
+                    <li className="flex justify-between">
+                      <span>Qualität (45%)</span>
+                      <span>{rec.scoreDetails.quality}%</span>
+                    </li>
+                  )}
+                  {rec.scoreDetails.underground != null && (
+                    <li className="flex justify-between">
+                      <span>Underground (30%)</span>
+                      <span>{rec.scoreDetails.underground}%</span>
+                    </li>
+                  )}
+                  {rec.scoreDetails.moodMatch != null && (
+                    <li className="flex justify-between">
+                      <span>Stimmungs-Treffer (+12%)</span>
+                      <span>{rec.scoreDetails.moodMatch ? "ja" : "–"}</span>
+                    </li>
+                  )}
+                  {rec.scoreDetails.genrePreferred != null && (
+                    <li className="flex justify-between">
+                      <span>Bevorzugtes Genre (+8%)</span>
+                      <span>{rec.scoreDetails.genrePreferred ? "ja" : "–"}</span>
+                    </li>
+                  )}
+                  {rec.scoreDetails.artistWeight != null && (
+                    <li className="flex justify-between">
+                      <span>Künstler-Gewicht (Feedback)</span>
+                      <span>{rec.scoreDetails.artistWeight.toFixed(2)}×</span>
+                    </li>
+                  )}
+                  {rec.scoreDetails.genreWeight != null && (
+                    <li className="flex justify-between">
+                      <span>Genre-Gewicht (Feedback)</span>
+                      <span>{rec.scoreDetails.genreWeight.toFixed(2)}×</span>
+                    </li>
+                  )}
+                  {rec.scoreDetails.source && (
+                    <li className="flex justify-between">
+                      <span>Quelle</span>
+                      <span>{rec.scoreDetails.source}</span>
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
           )}
 
           {/* Scores */}

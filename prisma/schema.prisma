@@ -91,6 +91,7 @@ model Recommendation {
   undergroundScore Float?
   reason        String?
   tags          Json      @default("[]")
+  scoreDetails  Json?
   dismissed     Boolean   @default(false)
   feedback      Feedback?
   createdAt     DateTime  @default(now())

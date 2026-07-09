@@ -7,7 +7,6 @@ import { prisma } from "@/lib/prisma";
 import {
   getTopArtists,
   getTopTracks,
-  getSpotifyRecommendations,
   searchArtistsByGenre,
   getArtistTopTracks,
   getFollowedArtists,
@@ -19,7 +18,6 @@ import {
 import {
   filterAndScoreArtists,
   filterAndScoreTracks,
-  applyFeedbackAdjustment,
   moodToGenres,
   type UserPreferences,
 } from "@/lib/recommendation-engine";
@@ -122,6 +120,17 @@ async function generateRecommendationsInternal(
 
   let candidates = [];
 
+  // Bevorzugte Genres und Stimmungs-Genres – fliessen in Suche UND Scoring ein
+  const preferredGenres = Object.keys(
+    (profile?.genrePreferences ?? {}) as Record<string, number>
+  );
+  const moodGenres = moodToGenres(
+    userPrefs.currentMood,
+    userPrefs.aestheticText
+  );
+  const preferredSet = new Set(preferredGenres.map((g) => g.toLowerCase()));
+  const moodSet = new Set(moodGenres.map((g) => g.toLowerCase()));
+
   // Früher empfohlene Künstler merken, damit sich Empfehlungen nicht wiederholen
   const previousRecs = await prisma.recommendation.findMany({
     where: { userId },
@@ -172,9 +181,6 @@ async function generateRecommendationsInternal(
 
     // Genres für die Entdeckung: bevorzugte Genres aus dem Profil,
     // sonst die häufigsten Genres der gehörten Top-Künstler
-    const preferredGenres = Object.keys(
-      (profile?.genrePreferences ?? {}) as Record<string, number>
-    );
     const genreCounts = new Map<string, number>();
     for (const a of topArtists) {
       const genres = Array.isArray(a.genres) ? a.genres : [];
@@ -196,44 +202,45 @@ async function generateRecommendationsInternal(
 
     // Stimmung übersetzt sich in Genres und hat Vorrang;
     // bei der Ähnlichkeitssuche zählen nur die Seed-Genres
-    const moodGenres = moodToGenres(
-      userPrefs.currentMood,
-      userPrefs.aestheticText
-    );
     const discoveryGenres = seed
       ? seed.genres.slice(0, 4)
       : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres))).slice(
           0,
-          6
+          8
         );
 
-    // Neue Künstler über die Genre-Suche entdecken.
-    // Zufälliger Offset, damit jede Generierung andere Treffer liefert.
-    const searchResults = await Promise.all(
-      discoveryGenres.map(async (g) => {
-        // Grosses Offset-Fenster, damit der Kandidaten-Pool nicht erschöpft
-        const offset = Math.floor(Math.random() * 8) * 25;
-        const found = await searchArtistsByGenre(
-          accessToken,
-          g,
-          40,
-          refreshToken,
-          offset
-        );
-        // Spotify liefert oft keine Genres mehr – dann das Such-Genre übernehmen
-        return found.map((a) => ({
-          ...a,
-          genres:
-            Array.isArray(a.genres) && a.genres.length > 0 ? a.genres : [g],
-        }));
-      })
-    );
+    // Neue Künstler über die Genre-Suche entdecken. Kleine Offsets sind
+    // wahrscheinlicher – bei Nischen-Genres liefern hohe Offsets nichts.
+    const OFFSETS = [0, 0, 25, 25, 50, 75, 100];
     const seenIds = new Set<string>();
-    const discovered = searchResults.flat().filter((a) => {
-      if (seenIds.has(a.id)) return false;
-      seenIds.add(a.id);
-      return true;
-    });
+    const searchWave = async (genres: string[], fixedOffset?: number) => {
+      const results = await Promise.all(
+        genres.map(async (g) => {
+          const offset =
+            fixedOffset ?? OFFSETS[Math.floor(Math.random() * OFFSETS.length)];
+          const found = await searchArtistsByGenre(
+            accessToken,
+            g,
+            50,
+            refreshToken,
+            offset
+          );
+          // Spotify liefert oft keine Genres mehr – dann das Such-Genre übernehmen
+          return found.map((a) => ({
+            ...a,
+            genres:
+              Array.isArray(a.genres) && a.genres.length > 0 ? a.genres : [g],
+          }));
+        })
+      );
+      return results.flat().filter((a) => {
+        if (seenIds.has(a.id)) return false;
+        seenIds.add(a.id);
+        return true;
+      });
+    };
+
+    const discovered = await searchWave(discoveryGenres);
 
     // Genre-Zuordnung für Track-Kandidaten aus den Top-Künstlern ableiten
     const artistGenreMap = new Map<string, string>();
@@ -255,29 +262,8 @@ async function generateRecommendationsInternal(
             }
       );
 
-    const artistCandidates = filterAndScoreArtists(discovered, userPrefs);
+    let artistCandidates = filterAndScoreArtists(discovered, userPrefs);
     const trackCandidates = fillGenre(filterAndScoreTracks(topTracks, userPrefs));
-
-    // Spotify-Recommendations-Endpoint (liefert bei neueren Apps nichts mehr)
-    const seedArtistIds = topArtists
-      .filter((a) => a.popularity < userPrefs.popularityThreshold)
-      .slice(0, 2)
-      .map((a) => a.id);
-
-    const seedGenres = discoveryGenres.slice(0, 3);
-
-    const spotifyRecs =
-      seedArtistIds.length > 0 || seedGenres.length > 0
-        ? await getSpotifyRecommendations(
-            accessToken,
-            seedArtistIds,
-            seedGenres,
-            { maxPopularity: userPrefs.popularityThreshold, limit: 20 },
-            refreshToken
-          )
-        : [];
-
-    const recCandidates = fillGenre(filterAndScoreTracks(spotifyRecs, userPrefs));
 
     // Bekannte Künstler ausschliessen – Empfehlungen sollen Neuentdeckungen sein
     const isDiscovery = (c: { artistName: string }) =>
@@ -336,12 +322,24 @@ async function generateRecommendationsInternal(
             tags: c.tags.concat("aus-bibliothek"),
           }));
 
+    // Nachschub-Welle: liefert die erste Suche zu wenig Neues,
+    // weitere Genres bei Offset 0 durchsuchen
+    let freshArtistCandidates = artistCandidates.filter(isDiscovery);
+    if (!seed && freshArtistCandidates.length < limit) {
+      const moreGenres = baseGenres.slice(8, 16);
+      if (moreGenres.length > 0) {
+        const moreDiscovered = await searchWave(moreGenres, 0);
+        freshArtistCandidates = freshArtistCandidates.concat(
+          filterAndScoreArtists(moreDiscovered, userPrefs).filter(isDiscovery)
+        );
+      }
+    }
+
     candidates = [
-      ...applyFeedbackAdjustment(playlistCandidates, artistWeights, genreWeights).filter(isDiscovery).slice(0, 10),
-      ...applyFeedbackAdjustment(libraryCandidates, artistWeights, genreWeights).slice(0, 4),
-      ...applyFeedbackAdjustment(artistCandidates, artistWeights, genreWeights).filter(isDiscovery),
-      ...applyFeedbackAdjustment(recCandidates, artistWeights, genreWeights).filter(isDiscovery),
-      ...applyFeedbackAdjustment(trackCandidates, artistWeights, genreWeights).filter(isDiscovery),
+      ...playlistCandidates.filter(isDiscovery).slice(0, 10),
+      ...libraryCandidates.slice(0, 4),
+      ...freshArtistCandidates,
+      ...trackCandidates.filter(isDiscovery),
     ];
   } else {
     // No Spotify connection: use curated underground defaults
@@ -379,8 +377,63 @@ async function generateRecommendationsInternal(
     return true;
   });
 
+  // Komposit-Score mit nachvollziehbaren Faktoren:
+  //   45% Qualität (inkl. Feedback-Gewichte für Künstler und Genre)
+  //   30% Underground-Score (je unbekannter, desto höher)
+  //  +12% Bonus bei Stimmungs-Treffer
+  //   +8% Bonus bei bevorzugtem Genre aus dem Profil
+  //   +5% Bonus für Funde aus Playlists/Bibliothek
+  const scoreOf = (c: any) => {
+    const g = (c.genre ?? "").toLowerCase();
+    const tags: string[] = Array.isArray(c.tags) ? c.tags : [];
+    const artistWeight = artistWeights[c.spotifyId ?? c.artistName] ?? 1.0;
+    const genreWeight = g ? genreWeights[g] ?? 1.0 : 1.0;
+    const genrePreferred = preferredSet.has(g);
+    const moodMatch = moodSet.has(g);
+    const fromCollection =
+      tags.includes("aus-playlist") || tags.includes("aus-bibliothek");
+    const quality = Math.max(
+      0,
+      Math.min(1, (c.qualityScore ?? 0.5) * artistWeight * genreWeight)
+    );
+    const final =
+      quality * 0.45 +
+      (c.undergroundScore ?? 0) * 0.3 +
+      (moodMatch ? 0.12 : 0) +
+      (genrePreferred ? 0.08 : 0) +
+      (fromCollection ? 0.05 : 0);
+
+    return {
+      final,
+      details: {
+        score: Math.round(final * 100),
+        quality: Math.round(quality * 100),
+        underground: Math.round((c.undergroundScore ?? 0) * 100),
+        popularity: c.popularity ?? null,
+        artistWeight: Number(artistWeight.toFixed(2)),
+        genreWeight: Number(genreWeight.toFixed(2)),
+        genrePreferred,
+        moodMatch,
+        source: tags.includes("aus-playlist")
+          ? "Playlist"
+          : tags.includes("aus-bibliothek")
+            ? "Bibliothek"
+            : tags.includes("similar")
+              ? "Ähnlichkeitssuche"
+              : "Genre-Suche",
+      },
+    };
+  };
+
+  const ranked = unique
+    .map((c) => {
+      const s = scoreOf(c);
+      return { ...c, finalScore: s.final, scoreDetails: s.details };
+    })
+    .sort((a, b) => b.finalScore - a.finalScore);
+
   // Aus den besten Kandidaten mischen, damit jede Generierung variiert
-  const pool = unique.slice(0, limit * 3);
+  const pool = ranked.slice(0, limit * 3);
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -461,6 +514,7 @@ async function generateRecommendationsInternal(
           undergroundScore: c.undergroundScore,
           reason: c.reason,
           tags: c.tags,
+          scoreDetails: (c as any).scoreDetails ?? undefined,
         },
       })
     )
