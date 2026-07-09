@@ -60,20 +60,48 @@ export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
   const factor =
     rating !== undefined ? (rating - 5) / 5 : positive ? 1 : -1;
 
+  // Kategorie verfeinert die Wirkung: ein schlechter Song ist nicht
+  // automatisch ein schlechter Künstler oder ein schlechtes Genre
+  let artistFactor = factor;
+  let genreFactor = factor;
+  if (category === "track-only" || category === "already-known") {
+    artistFactor = 0;
+    genreFactor = 0;
+  } else if (category === "wrong-genre") {
+    artistFactor = factor * 0.5;
+    genreFactor = factor * 1.5;
+  }
+
   artistWeights[artistKey] = Math.min(
     2.0,
-    Math.max(0.1, currentArtistWeight + 0.2 * factor)
+    Math.max(0.1, currentArtistWeight + 0.2 * artistFactor)
   );
   if (genreKey)
     genreWeights[genreKey] = Math.min(
       2.0,
-      Math.max(0.2, currentGenreWeight + 0.1 * factor)
+      Math.max(0.2, currentGenreWeight + 0.1 * genreFactor)
     );
+
+  // «Zu mainstream»: Popularity-Schwelle etwas senken
+  const newThreshold =
+    category === "too-mainstream"
+      ? Math.max(20, (profile?.popularityThreshold ?? 70) - 5)
+      : undefined;
 
   await prisma.userProfile.upsert({
     where: { userId },
-    update: { artistWeights, genreWeights, updatedAt: new Date() },
-    create: { userId, artistWeights, genreWeights },
+    update: {
+      artistWeights,
+      genreWeights,
+      ...(newThreshold !== undefined && { popularityThreshold: newThreshold }),
+      updatedAt: new Date(),
+    },
+    create: {
+      userId,
+      artistWeights,
+      genreWeights,
+      ...(newThreshold !== undefined && { popularityThreshold: newThreshold }),
+    },
   });
 
   revalidatePath("/dashboard");

@@ -28,6 +28,13 @@ interface FeedbackEntry {
 
 type FilterMode = "alle" | "positiv" | "negativ";
 
+const CATEGORY_LABELS: Record<string, string> = {
+  "track-only": "Song passt nicht, Künstler ok",
+  "wrong-genre": "Falsches Genre",
+  "too-mainstream": "Zu mainstream",
+  "already-known": "Schon gekannt",
+};
+
 function formatDay(date: Date): string {
   const today = new Date();
   const yesterday = new Date(today);
@@ -168,6 +175,9 @@ export function HistoryView({ feedbacks }: { feedbacks: FeedbackEntry[] }) {
                       <p className="text-white/30 text-xs truncate">
                         {time} Uhr
                         {rec.genre ? ` · ${rec.genre}` : ""}
+                        {f.category
+                          ? ` · ${CATEGORY_LABELS[f.category] ?? f.category}`
+                          : ""}
                         {f.reason ? ` · «${f.reason}»` : ""}
                       </p>
                     </div>

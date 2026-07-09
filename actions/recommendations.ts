@@ -76,12 +76,21 @@ async function generateRecommendationsInternal(
   // Früher empfohlene Künstler merken, damit sich Empfehlungen nicht wiederholen
   const previousRecs = await prisma.recommendation.findMany({
     where: { userId },
-    select: { artistName: true },
+    select: {
+      artistName: true,
+      trackName: true,
+      feedback: { select: { category: true } },
+    },
     orderBy: { createdAt: "desc" },
     take: 300,
   });
   const alreadyRecommended = new Set<string>();
+  const blockedTracks = new Set<string>();
   for (const r of previousRecs) {
+    if (r.trackName)
+      blockedTracks.add(`${r.artistName}::${r.trackName}`.toLowerCase());
+    // «Song passt nicht, Künstler ok»: Künstler darf mit anderem Track wiederkommen
+    if (r.feedback?.category === "track-only") continue;
     for (const n of r.artistName.split(", "))
       alreadyRecommended.add(n.toLowerCase());
   }
@@ -282,7 +291,13 @@ async function generateRecommendationsInternal(
         const deepCuts = tracks
           .slice()
           .sort((a, b) => (a.popularity ?? 0) - (b.popularity ?? 0))
+          // Bereits empfohlene Songs dieses Künstlers nicht nochmal vorschlagen
+          .filter(
+            (t) =>
+              !blockedTracks.has(`${c.artistName}::${t.name}`.toLowerCase())
+          )
           .slice(0, 3);
+        if (deepCuts.length === 0) return c;
         const pick = deepCuts[Math.floor(Math.random() * deepCuts.length)];
         return {
           ...c,

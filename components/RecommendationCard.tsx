@@ -53,17 +53,29 @@ export function RecommendationCard({
   compact?: boolean;
 }) {
   const [feedback, setFeedback] = useState(rec.feedback ?? null);
+  const [pendingRating, setPendingRating] = useState<number | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const tags = parseTags(rec.tags);
   const underground = tags.includes("underground-gem");
 
-  const handleRating = async (rating: number) => {
-    if (feedback || submitting) return;
+  const submitRating = async (rating: number, category?: string) => {
     setSubmitting(true);
-    const result = await submitFeedback({ recommendationId: rec.id, rating });
+    const result = await submitFeedback({
+      recommendationId: rec.id,
+      rating,
+      category,
+    });
     if (result.success) setFeedback({ positive: rating >= 6, rating });
     setSubmitting(false);
+    setPendingRating(null);
+  };
+
+  const handleRating = (rating: number) => {
+    if (feedback || submitting) return;
+    // Bei tiefen Bewertungen kurz nachfragen, was genau nicht passt
+    if (rating <= 4) setPendingRating(rating);
+    else submitRating(rating);
   };
 
   const ratingColor = (r: number) =>
@@ -202,7 +214,7 @@ export function RecommendationCard({
           )}
 
           {/* Bewertung 0–10 */}
-          {!compact && !feedback && (
+          {!compact && !feedback && pendingRating == null && (
             <div className="mb-3">
               <p className="text-white/30 text-[10px] uppercase tracking-wider mb-1.5">
                 Bewertung (0–10)
@@ -218,6 +230,39 @@ export function RecommendationCard({
                     {i}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Nachfrage bei tiefer Bewertung */}
+          {!compact && !feedback && pendingRating != null && (
+            <div className="mb-3">
+              <p className="text-white/30 text-[10px] uppercase tracking-wider mb-1.5">
+                Bewertung {pendingRating}/10 – was passt nicht?
+              </p>
+              <div className="flex gap-1.5 flex-wrap">
+                {[
+                  ["track-only", "Song passt nicht, Künstler ok"],
+                  ["wrong-genre", "Falsches Genre"],
+                  ["too-mainstream", "Zu mainstream"],
+                  ["already-known", "Kenne ich schon"],
+                ].map(([cat, label]) => (
+                  <button
+                    key={cat}
+                    onClick={() => submitRating(pendingRating, cat)}
+                    disabled={submitting}
+                    className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-red-500/15 hover:border-red-500/30 text-white/50 hover:text-red-300 text-[11px] font-medium transition-colors disabled:opacity-40"
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => submitRating(pendingRating)}
+                  disabled={submitting}
+                  className="px-2.5 py-1 rounded-lg text-white/30 hover:text-white/60 text-[11px] transition-colors disabled:opacity-40"
+                >
+                  Überspringen
+                </button>
               </div>
             </div>
           )}
