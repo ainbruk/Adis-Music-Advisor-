@@ -129,7 +129,7 @@ async function generateRecommendationsInternal(
       feedback: { select: { category: true } },
     },
     orderBy: { createdAt: "desc" },
-    take: 300,
+    take: 500,
   });
   const alreadyRecommended = new Set<string>();
   const blockedTracks = new Set<string>();
@@ -205,11 +205,12 @@ async function generateRecommendationsInternal(
     // Zufälliger Offset, damit jede Generierung andere Treffer liefert.
     const searchResults = await Promise.all(
       discoveryGenres.map(async (g) => {
-        const offset = Math.floor(Math.random() * 4) * 25;
+        // Grosses Offset-Fenster, damit der Kandidaten-Pool nicht erschöpft
+        const offset = Math.floor(Math.random() * 8) * 25;
         const found = await searchArtistsByGenre(
           accessToken,
           g,
-          30,
+          40,
           refreshToken,
           offset
         );
@@ -301,14 +302,14 @@ async function generateRecommendationsInternal(
     (c) => !profileArtists.has(c.artistName.toLowerCase())
   );
 
-  // Wiederholungen vermeiden – ausser es bliebe gar nichts mehr übrig
-  const fresh = candidates.filter(
+  // Wiederholungen strikt ausschliessen – lieber weniger Empfehlungen
+  // als bereits bekannte Künstler erneut vorschlagen
+  candidates = candidates.filter(
     (c) =>
       !c.artistName
         .split(", ")
         .some((n) => alreadyRecommended.has(n.toLowerCase()))
   );
-  if (fresh.length > 0) candidates = fresh;
 
   // Remove duplicates by artistName+trackName
   const seen = new Set<string>();
@@ -362,6 +363,15 @@ async function generateRecommendationsInternal(
         };
       })
     );
+  }
+
+  if (top.length === 0) {
+    return {
+      success: false,
+      error:
+        "Keine neuen Empfehlungen gefunden – alle Treffer wurden dir schon vorgeschlagen. Füge im Profil weitere Genres hinzu oder wähle eine andere Stimmung.",
+      items: [],
+    };
   }
 
   // Bei Ähnlichkeitssuche den Bezug in der Begründung ausweisen
