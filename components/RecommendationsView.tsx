@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import {
   generateRecommendations,
+  generateSimilarRecommendations,
   dismissRecommendation,
 } from "@/actions/recommendations";
 import { updateProfile } from "@/actions/profile";
@@ -92,8 +93,7 @@ export function RecommendationsView({
       ? "Alle"
       : activeGenre;
 
-  const runGeneration = async () => {
-    const result = await generateRecommendations(12, { excludeSaved });
+  const mergeResults = (result: { success: boolean; items: any[]; error?: string }) => {
     if (result.success) {
       const newIds = new Set<string>(result.items.map((r: any) => r.id));
       setLatestIds(newIds);
@@ -107,6 +107,19 @@ export function RecommendationsView({
     } else {
       setError(result.error ?? "Fehler bei der Generierung");
     }
+  };
+
+  const runGeneration = async () => {
+    mergeResults(await generateRecommendations(12, { excludeSaved }));
+  };
+
+  // Ähnliche Empfehlungen zu einer gut bewerteten Karte holen
+  const handleSimilar = (id: string) => {
+    setError("");
+    startTransition(async () => {
+      mergeResults(await generateSimilarRecommendations(id));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
   };
 
   const handleGenerate = () => {
@@ -278,6 +291,7 @@ export function RecommendationsView({
                       rec={rec}
                       onRated={handleRated}
                       onDismiss={handleDismiss}
+                      onSimilar={handleSimilar}
                     />
                   ))}
               </div>
@@ -299,6 +313,7 @@ export function RecommendationsView({
                       rec={rec}
                       onRated={handleRated}
                       onDismiss={handleDismiss}
+                      onSimilar={handleSimilar}
                     />
                   ))}
               </div>
@@ -330,6 +345,7 @@ export function RecommendationsView({
                   key={rec.id}
                   rec={rec}
                   onDismiss={handleDismiss}
+                  onSimilar={handleSimilar}
                 />
               ))}
             </div>

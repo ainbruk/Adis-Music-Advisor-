@@ -12,6 +12,7 @@ import {
   getArtistTopTracks,
   getFollowedArtists,
   getSavedTrackArtistNames,
+  searchArtist,
 } from "@/lib/spotify";
 import {
   filterAndScoreArtists,
@@ -42,9 +43,55 @@ export async function generateRecommendations(
   }
 }
 
+// Ähnliche Empfehlungen zu einer gut bewerteten Empfehlung generieren
+export async function generateSimilarRecommendations(recommendationId: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id)
+      return { success: false, error: "Nicht authentifiziert", items: [] };
+
+    const rec = await prisma.recommendation.findFirst({
+      where: { id: recommendationId, userId: session.user.id },
+    });
+    if (!rec)
+      return { success: false, error: "Empfehlung nicht gefunden", items: [] };
+
+    // Genres des Künstlers über die Spotify-Suche verfeinern
+    const accessToken = (session as any).accessToken as string | undefined;
+    const refreshToken = (session as any).refreshToken as string | undefined;
+    let genres: string[] = rec.genre ? [rec.genre] : [];
+    if (accessToken) {
+      const found = await searchArtist(accessToken, rec.artistName, refreshToken);
+      const artistGenres = Array.isArray(found[0]?.genres)
+        ? found[0]!.genres
+        : [];
+      genres = Array.from(new Set(genres.concat(artistGenres))).slice(0, 4);
+    }
+    if (genres.length === 0)
+      return {
+        success: false,
+        error: "Kein Genre für die Ähnlichkeitssuche gefunden",
+        items: [],
+      };
+
+    return await generateRecommendationsInternal(6, true, {
+      genres,
+      similarTo: rec.artistName,
+    });
+  } catch (e: any) {
+    console.error("[generateSimilarRecommendations]", e);
+    return {
+      success: false,
+      error: "Ähnliche Empfehlungen konnten nicht erstellt werden",
+      items: [],
+    };
+  }
+}
+
 async function generateRecommendationsInternal(
   limit: number,
-  excludeSaved: boolean
+  excludeSaved: boolean,
+  seed?: { genres: string[]; similarTo: string }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { success: false, error: "Nicht authentifiziert", items: [] };
@@ -141,14 +188,18 @@ async function generateRecommendationsInternal(
       [baseGenres[i], baseGenres[j]] = [baseGenres[j], baseGenres[i]];
     }
 
-    // Stimmung übersetzt sich in Genres und hat Vorrang
+    // Stimmung übersetzt sich in Genres und hat Vorrang;
+    // bei der Ähnlichkeitssuche zählen nur die Seed-Genres
     const moodGenres = moodToGenres(
       userPrefs.currentMood,
       userPrefs.aestheticText
     );
-    const discoveryGenres = Array.from(
-      new Set(moodGenres.slice(0, 3).concat(baseGenres))
-    ).slice(0, 6);
+    const discoveryGenres = seed
+      ? seed.genres.slice(0, 4)
+      : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres))).slice(
+          0,
+          6
+        );
 
     // Neue Künstler über die Genre-Suche entdecken.
     // Zufälliger Offset, damit jede Generierung andere Treffer liefert.
@@ -311,6 +362,15 @@ async function generateRecommendationsInternal(
         };
       })
     );
+  }
+
+  // Bei Ähnlichkeitssuche den Bezug in der Begründung ausweisen
+  if (seed) {
+    top = top.map((c) => ({
+      ...c,
+      reason: `Ähnlich zu ${seed.similarTo}`,
+      tags: Array.isArray(c.tags) ? c.tags.concat("similar") : ["similar"],
+    }));
   }
 
   // Alte Empfehlungen bleiben in der DB (Sperrliste gegen Wiederholungen)

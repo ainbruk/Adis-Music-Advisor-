@@ -33,6 +33,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   "wrong-genre": "Falsches Genre",
   "too-mainstream": "Zu mainstream",
   "already-known": "Schon gekannt",
+  "genau-mein-sound": "Genau mein Sound",
+  "starker-track": "Starker Track",
+  "passt-zur-stimmung": "Passt zur Stimmung",
+  "neue-entdeckung": "Tolle Entdeckung",
 };
 
 function formatDay(date: Date): string {

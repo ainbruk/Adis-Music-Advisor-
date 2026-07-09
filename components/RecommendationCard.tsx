@@ -11,6 +11,7 @@ import {
   Play,
   TrendingDown,
   X,
+  Sparkles,
 } from "lucide-react";
 import { submitFeedback } from "@/actions/feedback";
 import { ShareCard } from "@/components/ShareCard";
@@ -46,16 +47,32 @@ function parseTags(tags: any): string[] {
   return [];
 }
 
+const NEGATIVE_CATEGORIES: [string, string][] = [
+  ["track-only", "Song passt nicht, Künstler ok"],
+  ["wrong-genre", "Falsches Genre"],
+  ["too-mainstream", "Zu mainstream"],
+  ["already-known", "Kenne ich schon"],
+];
+
+const POSITIVE_CATEGORIES: [string, string][] = [
+  ["genau-mein-sound", "Genau mein Sound"],
+  ["starker-track", "Starker Track"],
+  ["passt-zur-stimmung", "Passt zur Stimmung"],
+  ["neue-entdeckung", "Tolle Entdeckung"],
+];
+
 export function RecommendationCard({
   rec,
   compact = false,
   onRated,
   onDismiss,
+  onSimilar,
 }: {
   rec: Rec;
   compact?: boolean;
   onRated?: (id: string, feedback: { positive: boolean; rating: number }) => void;
   onDismiss?: (id: string) => void;
+  onSimilar?: (id: string) => void;
 }) {
   const [feedback, setFeedback] = useState(rec.feedback ?? null);
   const [pendingRating, setPendingRating] = useState<number | null>(null);
@@ -81,9 +98,9 @@ export function RecommendationCard({
 
   const handleRating = (rating: number) => {
     if (feedback || submitting) return;
-    // Bei tiefen Bewertungen kurz nachfragen, was genau nicht passt
-    if (rating <= 4) setPendingRating(rating);
-    else submitRating(rating);
+    // Bei klaren Bewertungen kurz nachfragen, was (nicht) passt
+    if (rating === 5) submitRating(rating);
+    else setPendingRating(rating);
   };
 
   const ratingColor = (r: number) =>
@@ -253,24 +270,27 @@ export function RecommendationCard({
             </div>
           )}
 
-          {/* Nachfrage bei tiefer Bewertung */}
+          {/* Nachfrage bei klarer Bewertung */}
           {!compact && !feedback && pendingRating != null && (
             <div className="mb-3">
               <p className="text-white/30 text-[10px] uppercase tracking-wider mb-1.5">
-                Bewertung {pendingRating}/10 – was passt nicht?
+                Bewertung {pendingRating}/10 –{" "}
+                {pendingRating <= 4 ? "was passt nicht?" : "was gefällt dir?"}
               </p>
               <div className="flex gap-1.5 flex-wrap">
-                {[
-                  ["track-only", "Song passt nicht, Künstler ok"],
-                  ["wrong-genre", "Falsches Genre"],
-                  ["too-mainstream", "Zu mainstream"],
-                  ["already-known", "Kenne ich schon"],
-                ].map(([cat, label]) => (
+                {(pendingRating <= 4
+                  ? NEGATIVE_CATEGORIES
+                  : POSITIVE_CATEGORIES
+                ).map(([cat, label]) => (
                   <button
                     key={cat}
                     onClick={() => submitRating(pendingRating, cat)}
                     disabled={submitting}
-                    className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-red-500/15 hover:border-red-500/30 text-white/50 hover:text-red-300 text-[11px] font-medium transition-colors disabled:opacity-40"
+                    className={`px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white/50 text-[11px] font-medium transition-colors disabled:opacity-40 ${
+                      pendingRating <= 4
+                        ? "hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-300"
+                        : "hover:bg-[#1DB954]/15 hover:border-[#1DB954]/30 hover:text-[#1DB954]"
+                    }`}
                   >
                     {label}
                   </button>
@@ -294,6 +314,17 @@ export function RecommendationCard({
 
           {/* Actions */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Ähnliche Empfehlungen zu gut Bewertetem */}
+            {onSimilar && feedback?.positive && (
+              <button
+                onClick={() => onSimilar(rec.id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600/20 hover:bg-brand-600/35 text-brand-300 text-xs font-medium transition-colors"
+              >
+                <Sparkles className="w-3 h-3" />
+                Ähnliches finden
+              </button>
+            )}
+
             {rec.spotifyUrl && (
               <a
                 href={rec.spotifyUrl}

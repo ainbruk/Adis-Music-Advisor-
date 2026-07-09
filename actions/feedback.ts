@@ -70,6 +70,12 @@ export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
   } else if (category === "wrong-genre") {
     artistFactor = factor * 0.5;
     genreFactor = factor * 1.5;
+  } else if (category === "genau-mein-sound") {
+    // Positives Genre-Signal verstärken
+    genreFactor = factor * 1.5;
+  } else if (category === "starker-track") {
+    // Der Track überzeugt – Künstler voll, Genre nur leicht anpassen
+    genreFactor = factor * 0.5;
   }
 
   artistWeights[artistKey] = Math.min(

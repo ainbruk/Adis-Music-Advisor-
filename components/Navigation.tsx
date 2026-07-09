@@ -9,6 +9,7 @@ import {
   Music2,
   User2,
   History,
+  Radar,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Übersicht", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/recommendations", label: "Empfehlungen", icon: Music2, exact: false },
   { href: "/dashboard/history", label: "Verlauf", icon: History, exact: false },
+  { href: "/dashboard/insights", label: "Bewertungsnetz", icon: Radar, exact: false },
   { href: "/dashboard/profile", label: "Mein Profil", icon: User2, exact: false },
 ];
 
