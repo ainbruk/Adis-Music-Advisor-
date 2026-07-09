@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface NavProps {
   user: {
@@ -55,7 +56,7 @@ export function Navigation({ user }: NavProps) {
       {/* Logo */}
       <div className="p-4 flex items-center gap-2.5 border-b border-white/5">
         <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0 glow-purple">
-          <Waves className="w-4 h-4 text-white" />
+          <Waves className="w-4 h-4 text-on-brand" />
         </div>
         {!collapsed && (
           <span className="font-bold text-base gradient-text truncate">
@@ -102,7 +103,7 @@ export function Navigation({ user }: NavProps) {
                 className="rounded-full"
               />
             ) : (
-              <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center text-xs font-bold">
+              <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center text-xs font-bold text-on-brand">
                 {user.name?.[0]?.toUpperCase() ?? "?"}
               </div>
             )}
@@ -114,6 +115,8 @@ export function Navigation({ user }: NavProps) {
             </div>
           </div>
         )}
+
+        <ThemeToggle showLabel={!collapsed} />
 
         <button
           onClick={() => signOut({ callbackUrl: "/" })}

@@ -67,7 +67,7 @@ export function ShareCard({ rec, onClose }: { rec: Rec; onClose: () => void }) {
             {/* Header */}
             <div className="flex items-center gap-2 mb-5">
               <div className="w-6 h-6 bg-brand-600 rounded-md flex items-center justify-center">
-                <Music2 className="w-3.5 h-3.5 text-white" />
+                <Music2 className="w-3.5 h-3.5 text-on-brand" />
               </div>
               <span className="text-xs font-bold text-brand-300 tracking-wider uppercase">
                 CuratedVibe
@@ -82,7 +82,7 @@ export function ShareCard({ rec, onClose }: { rec: Rec; onClose: () => void }) {
 
             {/* Cover + Info */}
             <div className="flex gap-4 mb-5">
-              <div className="w-20 h-20 rounded-xl overflow-hidden bg-surface-700 flex-shrink-0 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-xl overflow-hidden bg-[#1a1a26] flex-shrink-0 flex items-center justify-center">
                 {rec.coverUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -91,15 +91,15 @@ export function ShareCard({ rec, onClose }: { rec: Rec; onClose: () => void }) {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <Music2 className="w-8 h-8 text-white/20" />
+                  <Music2 className="w-8 h-8 text-on-brand/20" />
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="font-bold text-white text-lg leading-snug">
+                <h3 className="font-bold text-on-brand text-lg leading-snug">
                   {rec.artistName}
                 </h3>
                 {rec.trackName && (
-                  <p className="text-white/50 text-sm mt-0.5 truncate">
+                  <p className="text-on-brand/50 text-sm mt-0.5 truncate">
                     {rec.trackName}
                   </p>
                 )}
@@ -114,7 +114,7 @@ export function ShareCard({ rec, onClose }: { rec: Rec; onClose: () => void }) {
             {/* Underground score */}
             {undergroundPct > 0 && (
               <div className="mb-4">
-                <div className="flex justify-between text-xs text-white/40 mb-1.5">
+                <div className="flex justify-between text-xs text-on-brand/40 mb-1.5">
                   <span>Underground-Score</span>
                   <span className="text-brand-300 font-medium">{undergroundPct}%</span>
                 </div>
@@ -128,14 +128,14 @@ export function ShareCard({ rec, onClose }: { rec: Rec; onClose: () => void }) {
             )}
 
             {rec.reason && (
-              <p className="text-white/40 text-xs leading-relaxed italic">
+              <p className="text-on-brand/40 text-xs leading-relaxed italic">
                 "{rec.reason}"
               </p>
             )}
 
             {/* Footer */}
-            <div className="mt-5 pt-4 border-t border-white/5">
-              <p className="text-white/20 text-xs">curatedvibe.app</p>
+            <div className="mt-5 pt-4 border-t border-on-brand/5">
+              <p className="text-on-brand/20 text-xs">curatedvibe.app</p>
             </div>
           </div>
         </div>
@@ -168,7 +168,7 @@ export function ShareCard({ rec, onClose }: { rec: Rec; onClose: () => void }) {
 
           <button
             onClick={handleDownload}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-on-brand text-sm font-medium transition-colors"
           >
             <Download className="w-4 h-4" />
             Bild speichern

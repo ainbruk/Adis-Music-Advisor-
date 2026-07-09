@@ -131,7 +131,7 @@ export function RecommendationCard({
               className="absolute bottom-3 right-3 w-9 h-9 rounded-full bg-brand-600/80 hover:bg-brand-500 flex items-center justify-center transition-colors"
               onClick={(e) => e.stopPropagation()}
             >
-              <Play className="w-4 h-4 text-white fill-white" />
+              <Play className="w-4 h-4 text-on-brand fill-on-brand" />
             </a>
           )}
 

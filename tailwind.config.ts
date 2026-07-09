@@ -22,12 +22,16 @@ const config: Config = {
           900: "#4c1d95",
           950: "#2e1065",
         },
+        // Theme-abhängig über CSS-Variablen (Dark/Light Toggle)
+        white: "rgb(var(--fg) / <alpha-value>)",
+        // Bleibt in beiden Themes weiss – für Text auf farbigen Flächen
+        "on-brand": "#ffffff",
         surface: {
-          900: "#0a0a0f",
-          800: "#12121a",
-          700: "#1a1a26",
-          600: "#22223a",
-          500: "#2d2d4e",
+          900: "rgb(var(--surface-900) / <alpha-value>)",
+          800: "rgb(var(--surface-800) / <alpha-value>)",
+          700: "rgb(var(--surface-700) / <alpha-value>)",
+          600: "rgb(var(--surface-600) / <alpha-value>)",
+          500: "rgb(var(--surface-500) / <alpha-value>)",
         },
         accent: {
           coral:  "#f97316",

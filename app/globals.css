@@ -3,13 +3,27 @@
 @tailwind utilities;
 
 @layer base {
+  /* Farbwerte als RGB-Tripel, damit Tailwind-Alphas funktionieren */
   :root {
-    --surface-900: #0a0a0f;
-    --surface-800: #12121a;
-    --surface-700: #1a1a26;
-    --surface-600: #22223a;
+    --fg: 241 240 255;
+    --surface-900: 10 10 15;
+    --surface-800: 18 18 26;
+    --surface-700: 26 26 38;
+    --surface-600: 34 34 58;
+    --surface-500: 45 45 78;
+    --scrollbar-thumb: #3d3d6b;
     --brand-500: #8b5cf6;
     --brand-400: #a78bfa;
+  }
+
+  html.light {
+    --fg: 26 26 46;
+    --surface-900: 243 243 249;
+    --surface-800: 255 255 255;
+    --surface-700: 233 233 243;
+    --surface-600: 221 221 237;
+    --surface-500: 204 204 227;
+    --scrollbar-thumb: #b8b8d4;
   }
 
   * {
@@ -23,8 +37,8 @@
   }
 
   body {
-    background-color: var(--surface-900);
-    color: #f1f0ff;
+    background-color: rgb(var(--surface-900));
+    color: rgb(var(--fg));
     font-family: system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
@@ -35,10 +49,10 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: var(--surface-800);
+    background: rgb(var(--surface-800));
   }
   ::-webkit-scrollbar-thumb {
-    background: #3d3d6b;
+    background: var(--scrollbar-thumb);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
@@ -48,7 +62,7 @@
 
 @layer components {
   .glass {
-    background: rgba(18, 18, 26, 0.7);
+    background: rgb(var(--surface-800) / 0.7);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(139, 92, 246, 0.15);
   }
@@ -57,7 +71,7 @@
     transition: all 0.2s ease;
   }
   .glass-hover:hover {
-    background: rgba(34, 34, 58, 0.8);
+    background: rgb(var(--surface-600) / 0.8);
     border-color: rgba(139, 92, 246, 0.35);
     transform: translateY(-2px);
   }
@@ -114,7 +128,7 @@
   .popularity-bar {
     height: 3px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgb(var(--fg) / 0.1);
     overflow: hidden;
   }
   .popularity-fill {

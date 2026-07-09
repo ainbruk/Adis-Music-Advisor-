@@ -123,7 +123,7 @@ export function RecommendationsView({
         <button
           onClick={handleGenerate}
           disabled={isPending}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm transition-all disabled:opacity-60 glow-purple"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-on-brand font-medium text-sm transition-all disabled:opacity-60 glow-purple"
         >
           {isPending ? (
             <RefreshCw className="w-4 h-4 animate-spin" />
@@ -225,7 +225,7 @@ export function RecommendationsView({
           <button
             onClick={handleGenerate}
             disabled={isPending}
-            className="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm transition-all disabled:opacity-60"
+            className="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-on-brand font-medium text-sm transition-all disabled:opacity-60"
           >
             {isPending ? "Generiere..." : "Jetzt starten"}
           </button>

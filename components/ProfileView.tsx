@@ -355,7 +355,7 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
             <button
               onClick={handleSave}
               disabled={isPending}
-              className="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm transition-all disabled:opacity-60 glow-purple"
+              className="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-on-brand font-medium text-sm transition-all disabled:opacity-60 glow-purple"
             >
               {isPending ? "Speichern..." : "Profil speichern"}
             </button>

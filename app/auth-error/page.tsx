@@ -20,7 +20,7 @@ export default function AuthErrorPage() {
         </div>
         <Link
           href="/"
-          className="inline-flex items-center px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors"
+          className="inline-flex items-center px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-on-brand text-sm font-medium transition-colors"
         >
           Zurück zur Startseite
         </Link>

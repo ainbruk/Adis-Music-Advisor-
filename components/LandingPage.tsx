@@ -8,6 +8,7 @@ import {
   Waves,
 } from "lucide-react";
 import { SpotifySignInButton } from "./SpotifySignInButton";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function LandingPage() {
   return (
@@ -23,14 +24,17 @@ export function LandingPage() {
       <header className="relative z-10 px-6 py-6 flex items-center justify-between max-w-7xl mx-auto">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center glow-purple">
-            <Waves className="w-5 h-5 text-white" />
+            <Waves className="w-5 h-5 text-on-brand" />
           </div>
           <span className="text-xl font-bold gradient-text">CuratedVibe</span>
         </div>
-        <SpotifySignInButton className="px-5 py-2.5 text-sm font-medium rounded-xl bg-brand-600 hover:bg-brand-500 text-white transition-all duration-200 flex items-center gap-2">
-          <span>Anmelden</span>
-          <ArrowRight className="w-4 h-4" />
-        </SpotifySignInButton>
+        <div className="flex items-center gap-2">
+          <ThemeToggle className="p-2.5 rounded-xl glass glass-hover text-white/50 hover:text-white/80 flex items-center transition-colors" />
+          <SpotifySignInButton className="px-5 py-2.5 text-sm font-medium rounded-xl bg-brand-600 hover:bg-brand-500 text-on-brand transition-all duration-200 flex items-center gap-2">
+            <span>Anmelden</span>
+            <ArrowRight className="w-4 h-4" />
+          </SpotifySignInButton>
+        </div>
       </header>
 
       {/* Hero */}
