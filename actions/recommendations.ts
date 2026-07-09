@@ -119,6 +119,8 @@ async function generateRecommendationsInternal(
   };
 
   let candidates = [];
+  let diagSearched = 0;
+  let diagFresh = 0;
 
   // Bevorzugte Genres und Stimmungs-Genres – fliessen in Suche UND Scoring ein
   const preferredGenres = Object.keys(
@@ -200,24 +202,23 @@ async function generateRecommendationsInternal(
       [baseGenres[i], baseGenres[j]] = [baseGenres[j], baseGenres[i]];
     }
 
-    // Stimmung übersetzt sich in Genres und hat Vorrang;
-    // bei der Ähnlichkeitssuche zählen nur die Seed-Genres
-    const discoveryGenres = seed
-      ? seed.genres.slice(0, 4)
-      : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres))).slice(
-          0,
-          8
-        );
+    // Bekannte Künstler ausschliessen – Empfehlungen sollen Neuentdeckungen sein
+    const isDiscovery = (c: { artistName: string }) =>
+      !c.artistName
+        .split(", ")
+        .some((n) => knownArtists.has(n.toLowerCase()));
 
-    // Neue Künstler über die Genre-Suche entdecken. Kleine Offsets sind
-    // wahrscheinlicher – bei Nischen-Genres liefern hohe Offsets nichts.
-    const OFFSETS = [0, 0, 25, 25, 50, 75, 100];
+    // Genre-Pool: Stimmung zuerst, dann die gemischten Profil-Genres;
+    // bei der Ähnlichkeitssuche zählen nur die Seed-Genres
+    const genrePool = seed
+      ? seed.genres.slice(0, 4)
+      : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres)));
+
     const seenIds = new Set<string>();
-    const searchWave = async (genres: string[], fixedOffset?: number) => {
+    const searchWave = async (genres: string[], offsetBase: number) => {
       const results = await Promise.all(
         genres.map(async (g) => {
-          const offset =
-            fixedOffset ?? OFFSETS[Math.floor(Math.random() * OFFSETS.length)];
+          const offset = offsetBase + Math.floor(Math.random() * 4) * 25;
           const found = await searchArtistsByGenre(
             accessToken,
             g,
@@ -240,7 +241,25 @@ async function generateRecommendationsInternal(
       });
     };
 
-    const discovered = await searchWave(discoveryGenres);
+    // Iterativ suchen: pro Welle andere Genres und tiefere Offsets,
+    // bis genügend wirklich neue Künstler gefunden sind
+    let freshArtistCandidates: ReturnType<typeof filterAndScoreArtists> = [];
+    for (
+      let wave = 0;
+      wave < 4 && freshArtistCandidates.length < limit * 2;
+      wave++
+    ) {
+      const start =
+        genrePool.length > 8 ? (wave * 8) % genrePool.length : 0;
+      const genres = genrePool.slice(start, start + 8);
+      if (genres.length === 0) break;
+      const found = await searchWave(genres, wave * 75);
+      freshArtistCandidates = freshArtistCandidates.concat(
+        filterAndScoreArtists(found, userPrefs).filter(isDiscovery)
+      );
+    }
+    diagSearched = seenIds.size;
+    diagFresh = freshArtistCandidates.length;
 
     // Genre-Zuordnung für Track-Kandidaten aus den Top-Künstlern ableiten
     const artistGenreMap = new Map<string, string>();
@@ -262,14 +281,7 @@ async function generateRecommendationsInternal(
             }
       );
 
-    let artistCandidates = filterAndScoreArtists(discovered, userPrefs);
     const trackCandidates = fillGenre(filterAndScoreTracks(topTracks, userPrefs));
-
-    // Bekannte Künstler ausschliessen – Empfehlungen sollen Neuentdeckungen sein
-    const isDiscovery = (c: { artistName: string }) =>
-      !c.artistName
-        .split(", ")
-        .some((n) => knownArtists.has(n.toLowerCase()));
 
     // Playlists durchforsten: unbekannte Künstler aus eigenen und
     // gefolgten Playlists (2–3 zufällige pro Generierung)
@@ -321,19 +333,6 @@ async function generateRecommendationsInternal(
             reason: "Vergessene Perle aus deiner Bibliothek",
             tags: c.tags.concat("aus-bibliothek"),
           }));
-
-    // Nachschub-Welle: liefert die erste Suche zu wenig Neues,
-    // weitere Genres bei Offset 0 durchsuchen
-    let freshArtistCandidates = artistCandidates.filter(isDiscovery);
-    if (!seed && freshArtistCandidates.length < limit) {
-      const moreGenres = baseGenres.slice(8, 16);
-      if (moreGenres.length > 0) {
-        const moreDiscovered = await searchWave(moreGenres, 0);
-        freshArtistCandidates = freshArtistCandidates.concat(
-          filterAndScoreArtists(moreDiscovered, userPrefs).filter(isDiscovery)
-        );
-      }
-    }
 
     candidates = [
       ...playlistCandidates.filter(isDiscovery).slice(0, 10),
@@ -480,8 +479,7 @@ async function generateRecommendationsInternal(
   if (top.length === 0) {
     return {
       success: false,
-      error:
-        "Keine neuen Empfehlungen gefunden – alle Treffer wurden dir schon vorgeschlagen. Füge im Profil weitere Genres hinzu oder wähle eine andere Stimmung.",
+      error: `Keine neuen Empfehlungen gefunden (${diagSearched} Künstler geprüft, ${diagFresh} unverbraucht, ${candidates.length} nach Filter). Füge im Profil weitere Genres hinzu oder wähle eine andere Stimmung.`,
       items: [],
     };
   }
