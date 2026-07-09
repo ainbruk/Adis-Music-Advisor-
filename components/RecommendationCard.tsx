@@ -10,6 +10,7 @@ import {
   Share2,
   Play,
   TrendingDown,
+  X,
 } from "lucide-react";
 import { submitFeedback } from "@/actions/feedback";
 import { ShareCard } from "@/components/ShareCard";
@@ -48,9 +49,13 @@ function parseTags(tags: any): string[] {
 export function RecommendationCard({
   rec,
   compact = false,
+  onRated,
+  onDismiss,
 }: {
   rec: Rec;
   compact?: boolean;
+  onRated?: (id: string, feedback: { positive: boolean; rating: number }) => void;
+  onDismiss?: (id: string) => void;
 }) {
   const [feedback, setFeedback] = useState(rec.feedback ?? null);
   const [pendingRating, setPendingRating] = useState<number | null>(null);
@@ -66,7 +71,10 @@ export function RecommendationCard({
       rating,
       category,
     });
-    if (result.success) setFeedback({ positive: rating >= 6, rating });
+    if (result.success) {
+      setFeedback({ positive: rating >= 6, rating });
+      onRated?.(rec.id, { positive: rating >= 6, rating });
+    }
     setSubmitting(false);
     setPendingRating(null);
   };
@@ -133,6 +141,17 @@ export function RecommendationCard({
             >
               <Play className="w-4 h-4 text-on-brand fill-on-brand" />
             </a>
+          )}
+
+          {/* Löschen – Empfehlung ausblenden und nie mehr vorschlagen */}
+          {onDismiss && (
+            <button
+              onClick={() => onDismiss(rec.id)}
+              title="Entfernen – wird nicht mehr vorgeschlagen"
+              className={`absolute top-3 ${feedback ? "right-12" : "right-3"} w-7 h-7 rounded-full bg-surface-900/60 hover:bg-red-500/30 border border-white/10 hover:border-red-500/40 flex items-center justify-center text-white/50 hover:text-red-300 transition-colors z-10`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           )}
 
           {/* Feedback indicator */}

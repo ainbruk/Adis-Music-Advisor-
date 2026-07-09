@@ -16,7 +16,7 @@ export default async function DashboardPage() {
     [profile, recentRecs, feedbackCount, positiveCount] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
       prisma.recommendation.findMany({
-        where: { userId: session.user.id },
+        where: { userId: session.user.id, dismissed: false },
         include: { feedback: true },
         orderBy: { createdAt: "desc" },
         take: 6,

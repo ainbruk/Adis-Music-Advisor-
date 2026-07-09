@@ -313,15 +313,7 @@ async function generateRecommendationsInternal(
     );
   }
 
-  // Persist to DB (upsert approach: delete old pending, insert new)
-  await prisma.recommendation.deleteMany({
-    where: {
-      userId,
-      feedback: null,
-      createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-    },
-  });
-
+  // Alte Empfehlungen bleiben in der DB (Sperrliste gegen Wiederholungen)
   const saved = await prisma.$transaction(
     top.map((c) =>
       prisma.recommendation.create({
@@ -354,11 +346,32 @@ export async function getStoredRecommendations() {
   if (!session?.user?.id) return [];
 
   return prisma.recommendation.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, dismissed: false },
     include: { feedback: true },
     orderBy: { createdAt: "desc" },
-    take: 24,
+    take: 48,
   });
+}
+
+// Entfernt eine Empfehlung aus der Ansicht – bleibt aber in der DB,
+// damit sie nie wieder vorgeschlagen wird
+export async function dismissRecommendation(id: string) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id)
+    return { success: false, error: "Nicht authentifiziert" };
+
+  try {
+    await prisma.recommendation.updateMany({
+      where: { id, userId: session.user.id },
+      data: { dismissed: true },
+    });
+  } catch (e) {
+    console.error("[dismissRecommendation]", e);
+    return { success: false, error: "Konnte nicht entfernt werden" };
+  }
+
+  revalidatePath("/dashboard");
+  return { success: true };
 }
 
 // Curated underground defaults – shown before Spotify connection

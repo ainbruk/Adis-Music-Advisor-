@@ -9,8 +9,14 @@ import {
   History,
   Heart,
   BookmarkX,
+  Archive,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
-import { generateRecommendations } from "@/actions/recommendations";
+import {
+  generateRecommendations,
+  dismissRecommendation,
+} from "@/actions/recommendations";
 import { updateProfile } from "@/actions/profile";
 import { RecommendationCard } from "@/components/RecommendationCard";
 
@@ -42,12 +48,33 @@ export function RecommendationsView({
   const [excludeSaved, setExcludeSaved] = useState(true);
   // IDs der zuletzt generierten Empfehlungen – für die Trennung neu/früher
   const [latestIds, setLatestIds] = useState<Set<string>>(new Set());
+  const [showArchive, setShowArchive] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
-  // Filter-Chips dynamisch aus den vorhandenen Empfehlungen ableiten
+  // Karte entfernen (bleibt in der DB gesperrt)
+  const handleDismiss = (id: string) => {
+    setRecs((prev) => prev.filter((r) => r.id !== id));
+    dismissRecommendation(id);
+  };
+
+  // Nach Bewertung wandert die Karte ins Archiv
+  const handleRated = (
+    id: string,
+    fb: { positive: boolean; rating: number }
+  ) => {
+    setRecs((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, feedback: fb } : r))
+    );
+  };
+
+  // Bewertete Empfehlungen wandern ins Archiv
+  const active = recs.filter((r) => !r.feedback);
+  const archived = recs.filter((r) => r.feedback);
+
+  // Filter-Chips dynamisch aus den aktiven Empfehlungen ableiten
   const genreCounts = new Map<string, number>();
-  for (const r of recs) {
+  for (const r of active) {
     const g = r.genre?.toLowerCase();
     if (g) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
   }
@@ -75,7 +102,7 @@ export function RecommendationsView({
           ...result.items,
           ...prev.filter((r) => !newIds.has(r.id)),
         ];
-        return merged.slice(0, 24);
+        return merged.slice(0, 48);
       });
     } else {
       setError(result.error ?? "Fehler bei der Generierung");
@@ -100,10 +127,10 @@ export function RecommendationsView({
 
   const filtered =
     effectiveGenre === "Alle"
-      ? recs
-      : recs.filter((r) => r.genre?.toLowerCase() === effectiveGenre);
+      ? active
+      : active.filter((r) => r.genre?.toLowerCase() === effectiveGenre);
 
-  const undergroundCount = recs.filter((r) => {
+  const undergroundCount = active.filter((r) => {
     const tags = Array.isArray(r.tags) ? r.tags : [];
     return tags.includes("underground-gem");
   }).length;
@@ -115,8 +142,9 @@ export function RecommendationsView({
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">Empfehlungen</h1>
           <p className="text-white/40 text-sm">
-            {recs.length} Empfehlungen ·{" "}
+            {active.length} Empfehlungen ·{" "}
             <span className="text-brand-400">{undergroundCount} Underground-Perlen</span>
+            {archived.length > 0 && <> · {archived.length} im Archiv</>}
           </p>
         </div>
 
@@ -245,7 +273,12 @@ export function RecommendationsView({
                 {filtered
                   .filter((r) => latestIds.has(r.id))
                   .map((rec) => (
-                    <RecommendationCard key={rec.id} rec={rec} />
+                    <RecommendationCard
+                      key={rec.id}
+                      rec={rec}
+                      onRated={handleRated}
+                      onDismiss={handleDismiss}
+                    />
                   ))}
               </div>
             </section>
@@ -261,12 +294,47 @@ export function RecommendationsView({
                 {filtered
                   .filter((r) => !latestIds.has(r.id))
                   .map((rec) => (
-                    <RecommendationCard key={rec.id} rec={rec} />
+                    <RecommendationCard
+                      key={rec.id}
+                      rec={rec}
+                      onRated={handleRated}
+                      onDismiss={handleDismiss}
+                    />
                   ))}
               </div>
             </section>
           )}
         </>
+      )}
+
+      {/* Archiv – bewertete Empfehlungen */}
+      {archived.length > 0 && (
+        <section className="mt-10">
+          <button
+            onClick={() => setShowArchive((v) => !v)}
+            className="w-full flex items-center gap-2 text-sm font-semibold text-white/40 hover:text-white/70 uppercase tracking-wider mb-4 transition-colors"
+          >
+            {showArchive ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+            <Archive className="w-4 h-4 text-accent-yellow/70" />
+            Archiv ({archived.length})
+          </button>
+
+          {showArchive && (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {archived.map((rec) => (
+                <RecommendationCard
+                  key={rec.id}
+                  rec={rec}
+                  onDismiss={handleDismiss}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
