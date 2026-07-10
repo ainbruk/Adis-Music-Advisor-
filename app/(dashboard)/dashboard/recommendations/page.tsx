@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { getStoredRecommendations } from "@/actions/recommendations";
 import { RecommendationsView } from "@/components/RecommendationsView";
 
+// Server Actions dieser Seite (Generierung) brauchen mehr Zeit als
+// die Standard-Limite von 10s
+export const maxDuration = 60;
+
 export default async function RecommendationsPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return null;

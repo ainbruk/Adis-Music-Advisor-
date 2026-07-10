@@ -242,24 +242,22 @@ async function generateRecommendationsInternal(
     };
 
     // Iterativ suchen: pro Welle andere Genres und tiefere Offsets,
-    // bis genügend wirklich neue Künstler gefunden sind
-    let freshArtistCandidates: ReturnType<typeof filterAndScoreArtists> = [];
-    for (
-      let wave = 0;
-      wave < 4 && freshArtistCandidates.length < limit * 2;
-      wave++
-    ) {
-      const start =
-        genrePool.length > 8 ? (wave * 8) % genrePool.length : 0;
-      const genres = genrePool.slice(start, start + 8);
-      if (genres.length === 0) break;
-      const found = await searchWave(genres, wave * 75);
-      freshArtistCandidates = freshArtistCandidates.concat(
-        filterAndScoreArtists(found, userPrefs).filter(isDiscovery)
-      );
-    }
-    diagSearched = seenIds.size;
-    diagFresh = freshArtistCandidates.length;
+    // bis genügend wirklich neue Künstler gefunden sind.
+    // Läuft parallel zur Playlist-Suche (Zeitbudget der Function).
+    const searchTask = (async () => {
+      let fresh: ReturnType<typeof filterAndScoreArtists> = [];
+      for (let wave = 0; wave < 4 && fresh.length < limit * 2; wave++) {
+        const start =
+          genrePool.length > 8 ? (wave * 8) % genrePool.length : 0;
+        const genres = genrePool.slice(start, start + 8);
+        if (genres.length === 0) break;
+        const found = await searchWave(genres, wave * 75);
+        fresh = fresh.concat(
+          filterAndScoreArtists(found, userPrefs).filter(isDiscovery)
+        );
+      }
+      return fresh;
+    })();
 
     // Genre-Zuordnung für Track-Kandidaten aus den Top-Künstlern ableiten
     const artistGenreMap = new Map<string, string>();
@@ -285,8 +283,9 @@ async function generateRecommendationsInternal(
 
     // Playlists durchforsten: unbekannte Künstler aus eigenen und
     // gefolgten Playlists (2–3 zufällige pro Generierung)
-    let playlistCandidates: typeof trackCandidates = [];
-    if (!seed) {
+    const playlistTask = (async () => {
+      const result: typeof trackCandidates = [];
+      if (seed) return result;
       try {
         const playlists = await getUserPlaylists(accessToken, refreshToken);
         for (let i = playlists.length - 1; i > 0; i--) {
@@ -300,7 +299,7 @@ async function generateRecommendationsInternal(
         picked.forEach((p, i) => {
           const scored = fillGenre(filterAndScoreTracks(plTracks[i], userPrefs));
           for (const c of scored.slice(0, 8)) {
-            playlistCandidates.push({
+            result.push({
               ...c,
               reason: `Aus deiner Playlist «${p.name}»`,
               tags: c.tags.concat("aus-playlist"),
@@ -310,7 +309,15 @@ async function generateRecommendationsInternal(
       } catch (e) {
         console.error("[playlistCandidates]", e);
       }
-    }
+      return result;
+    })();
+
+    const [freshArtistCandidates, playlistCandidates] = await Promise.all([
+      searchTask,
+      playlistTask,
+    ]);
+    diagSearched = seenIds.size;
+    diagFresh = freshArtistCandidates.length;
 
     // Bibliothek durchforsten: gespeicherte, wenig populäre Songs von
     // Künstlern, die du kaum hörst – vergessene Perlen (bewusst nicht
