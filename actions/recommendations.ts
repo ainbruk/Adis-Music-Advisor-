@@ -438,12 +438,13 @@ async function generateRecommendationsInternal(
     diagFresh = freshArtistCandidates.length;
 
     // Bibliothek durchforsten: gespeicherte, wenig populäre Songs von
-    // Künstlern, die du kaum hörst – vergessene Perlen (bewusst nicht
-    // vom Bekannt-Filter ausgeschlossen)
+    // Künstlern, die du kaum hörst – vergessene Perlen. Nur wenn der
+    // Schalter «Gespeicherte Künstler erlaubt» aktiv ist, sonst wäre
+    // er widersprüchlich (Bibliothek = gespeicherte Künstler).
     const activeArtistNames = new Set(
       topArtists.map((a) => a.name.toLowerCase())
     );
-    const libraryCandidates = seed
+    const libraryCandidates = seed || excludeSaved
       ? []
       : fillGenre(filterAndScoreTracks(savedTracks, userPrefs))
           .filter(
