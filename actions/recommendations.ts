@@ -20,6 +20,7 @@ import {
   moodToGenres,
   type UserPreferences,
 } from "@/lib/recommendation-engine";
+import { ALL_GENRES } from "@/lib/genres";
 
 export async function generateRecommendations(
   limit = 12,
@@ -249,6 +250,23 @@ async function generateRecommendationsInternal(
   const preferredSet = new Set(preferredGenres.map((g) => g.toLowerCase()));
   const moodSet = new Set(moodGenres.map((g) => g.toLowerCase()));
 
+  // Nennt die Freitext-Stimmung direkt ein Genre (z.B. «Psytrance»),
+  // wird gezielt NUR dort gesucht statt im ganzen Genre-Profil
+  const moodTextLower = (userPrefs.currentMood ?? "").toLowerCase().trim();
+  let directGenres = ALL_GENRES.filter((g) =>
+    moodTextLower.includes(g)
+  ).sort((a, b) => b.length - a.length);
+  if (
+    directGenres.length === 0 &&
+    moodGenres.length === 0 &&
+    moodTextLower &&
+    moodTextLower.split(/\s+/).length <= 3
+  ) {
+    // Kurzer Freitext ohne Stimmungs-Treffer: als Genre-Suchbegriff versuchen
+    directGenres = [moodTextLower];
+  }
+  for (const g of directGenres) moodSet.add(g);
+
   // Früher empfohlene Künstler merken, damit sich Empfehlungen nicht wiederholen
   const previousRecs = await prisma.recommendation.findMany({
     where: { userId },
@@ -326,7 +344,9 @@ async function generateRecommendationsInternal(
     // bei der Ähnlichkeitssuche zählen nur die Seed-Genres
     const genrePool = seed
       ? seed.genres.slice(0, 4)
-      : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres)));
+      : directGenres.length > 0
+        ? directGenres.slice(0, 4)
+        : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres)));
     diagGenres = genrePool.slice(0, 16);
 
     const seenIds = new Set<string>();
