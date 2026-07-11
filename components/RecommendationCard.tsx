@@ -87,6 +87,7 @@ export function RecommendationCard({
 }) {
   const [feedback, setFeedback] = useState(rec.feedback ?? null);
   const [pendingRating, setPendingRating] = useState<number | null>(null);
+  const [pendingCats, setPendingCats] = useState<string[]>([]);
   const [showShare, setShowShare] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -106,14 +107,23 @@ export function RecommendationCard({
     }
     setSubmitting(false);
     setPendingRating(null);
+    setPendingCats([]);
   };
 
   const handleRating = (rating: number) => {
     if (feedback || submitting) return;
     // Bei klaren Bewertungen kurz nachfragen, was (nicht) passt
     if (rating === 5) submitRating(rating);
-    else setPendingRating(rating);
+    else {
+      setPendingRating(rating);
+      setPendingCats([]);
+    }
   };
+
+  const toggleCat = (cat: string) =>
+    setPendingCats((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
 
   const ratingColor = (r: number) =>
     r >= 6 ? "text-[#1DB954]" : r <= 4 ? "text-red-400" : "text-white/60";
@@ -360,31 +370,54 @@ export function RecommendationCard({
             </div>
           )}
 
-          {/* Nachfrage bei klarer Bewertung */}
+          {/* Nachfrage bei klarer Bewertung – Mehrfachauswahl möglich */}
           {!compact && !feedback && pendingRating != null && (
             <div className="mb-3">
               <p className="text-white/30 text-[10px] uppercase tracking-wider mb-1.5">
                 Bewertung {pendingRating}/10 –{" "}
-                {pendingRating <= 4 ? "was passt nicht?" : "was gefällt dir?"}
+                {pendingRating <= 4
+                  ? "was passt nicht? (mehrere möglich)"
+                  : "was gefällt dir? (mehrere möglich)"}
               </p>
               <div className="flex gap-1.5 flex-wrap">
                 {(pendingRating <= 4
                   ? NEGATIVE_CATEGORIES
                   : POSITIVE_CATEGORIES
-                ).map(([cat, label]) => (
-                  <button
-                    key={cat}
-                    onClick={() => submitRating(pendingRating, cat)}
-                    disabled={submitting}
-                    className={`px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white/50 text-[11px] font-medium transition-colors disabled:opacity-40 ${
-                      pendingRating <= 4
-                        ? "hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-300"
-                        : "hover:bg-[#1DB954]/15 hover:border-[#1DB954]/30 hover:text-[#1DB954]"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+                ).map(([cat, label]) => {
+                  const active = pendingCats.includes(cat);
+                  const activeCls =
+                    pendingRating <= 4
+                      ? "bg-red-500/15 border-red-500/30 text-red-300"
+                      : "bg-[#1DB954]/15 border-[#1DB954]/30 text-[#1DB954]";
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => toggleCat(cat)}
+                      disabled={submitting}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-colors disabled:opacity-40 ${
+                        active
+                          ? activeCls
+                          : "bg-white/5 border-white/10 text-white/50 hover:text-white/80 hover:border-white/25"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-1.5 mt-1.5">
+                <button
+                  onClick={() =>
+                    submitRating(
+                      pendingRating,
+                      pendingCats.length > 0 ? pendingCats.join(",") : undefined
+                    )
+                  }
+                  disabled={submitting}
+                  className="px-3 py-1 rounded-lg bg-brand-600 hover:bg-brand-500 text-on-brand text-[11px] font-medium transition-colors disabled:opacity-40"
+                >
+                  Speichern
+                </button>
                 <button
                   onClick={() => submitRating(pendingRating)}
                   disabled={submitting}

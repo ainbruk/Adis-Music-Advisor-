@@ -180,7 +180,10 @@ export function HistoryView({ feedbacks }: { feedbacks: FeedbackEntry[] }) {
                         {time} Uhr
                         {rec.genre ? ` · ${rec.genre}` : ""}
                         {f.category
-                          ? ` · ${CATEGORY_LABELS[f.category] ?? f.category}`
+                          ? ` · ${f.category
+                              .split(",")
+                              .map((c) => CATEGORY_LABELS[c.trim()] ?? c.trim())
+                              .join(" · ")}`
                           : ""}
                         {f.reason ? ` · «${f.reason}»` : ""}
                       </p>

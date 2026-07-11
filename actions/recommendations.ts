@@ -239,15 +239,11 @@ async function generateRecommendationsInternal(
   let diagFresh = 0;
   let diagGenres: string[] = [];
 
-  // Bevorzugte Genres und Stimmungs-Genres – fliessen in Suche UND Scoring ein
-  const preferredGenres = Object.keys(
-    (profile?.genrePreferences ?? {}) as Record<string, number>
-  );
+  // Stimmungs-Genres (mehrere Stimmungen möglich) – steuern Suche UND Scoring
   const moodGenres = moodToGenres(
     userPrefs.currentMood,
     userPrefs.aestheticText
   );
-  const preferredSet = new Set(preferredGenres.map((g) => g.toLowerCase()));
   const moodSet = new Set(moodGenres.map((g) => g.toLowerCase()));
 
   // Nennt die Freitext-Stimmung direkt ein Genre (z.B. «Psytrance»),
@@ -324,11 +320,9 @@ async function generateRecommendationsInternal(
       .sort((x, y) => y[1] - x[1])
       .map(([g]) => g);
 
-    // Profil-Genres zufällig mischen, damit bei vielen Genres
+    // Genres aus dem Hörverhalten zufällig mischen, damit
     // jede Generierung andere Ecken durchsucht
-    const baseGenres = (
-      preferredGenres.length > 0 ? preferredGenres : derivedGenres
-    ).slice();
+    const baseGenres = derivedGenres.slice();
     for (let i = baseGenres.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [baseGenres[i], baseGenres[j]] = [baseGenres[j], baseGenres[i]];
@@ -520,14 +514,12 @@ async function generateRecommendationsInternal(
   //   45% Qualität (inkl. Feedback-Gewichte für Künstler und Genre)
   //   30% Underground-Score (je unbekannter, desto höher)
   //  +12% Bonus bei Stimmungs-Treffer
-  //   +8% Bonus bei bevorzugtem Genre aus dem Profil
   //   +5% Bonus für Funde aus Playlists/Bibliothek
   const scoreOf = (c: any) => {
     const g = (c.genre ?? "").toLowerCase();
     const tags: string[] = Array.isArray(c.tags) ? c.tags : [];
     const artistWeight = artistWeights[c.spotifyId ?? c.artistName] ?? 1.0;
     const genreWeight = g ? genreWeights[g] ?? 1.0 : 1.0;
-    const genrePreferred = preferredSet.has(g);
     const moodMatch = moodSet.has(g);
     const fromCollection =
       tags.includes("aus-playlist") || tags.includes("aus-bibliothek");
@@ -539,7 +531,6 @@ async function generateRecommendationsInternal(
       quality * 0.45 +
       (c.undergroundScore ?? 0) * 0.3 +
       (moodMatch ? 0.12 : 0) +
-      (genrePreferred ? 0.08 : 0) +
       (fromCollection ? 0.05 : 0);
 
     return {
@@ -551,7 +542,6 @@ async function generateRecommendationsInternal(
         popularity: c.popularity ?? null,
         artistWeight: Number(artistWeight.toFixed(2)),
         genreWeight: Number(genreWeight.toFixed(2)),
-        genrePreferred,
         moodMatch,
         source: tags.includes("aus-playlist")
           ? "Playlist"

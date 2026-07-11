@@ -60,22 +60,27 @@ export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
   const factor =
     rating !== undefined ? (rating - 5) / 5 : positive ? 1 : -1;
 
-  // Kategorie verfeinert die Wirkung: ein schlechter Song ist nicht
-  // automatisch ein schlechter Künstler oder ein schlechtes Genre
+  // Kategorien (mehrere möglich, kommagetrennt) verfeinern die Wirkung:
+  // ein schlechter Song ist nicht automatisch ein schlechter Künstler
+  const cats = (category ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   let artistFactor = factor;
   let genreFactor = factor;
-  if (category === "track-only" || category === "already-known") {
+  if (cats.includes("track-only") || cats.includes("already-known")) {
     artistFactor = 0;
     genreFactor = 0;
-  } else if (category === "wrong-genre") {
-    artistFactor = factor * 0.5;
-    genreFactor = factor * 1.5;
-  } else if (category === "genau-mein-sound") {
+  } else {
+    if (cats.includes("wrong-genre")) {
+      artistFactor *= 0.5;
+      genreFactor *= 1.5;
+    }
     // Positives Genre-Signal verstärken
-    genreFactor = factor * 1.5;
-  } else if (category === "starker-track") {
+    if (cats.includes("genau-mein-sound")) genreFactor *= 1.5;
     // Der Track überzeugt – Künstler voll, Genre nur leicht anpassen
-    genreFactor = factor * 0.5;
+    if (cats.includes("starker-track")) genreFactor *= 0.5;
   }
 
   artistWeights[artistKey] = Math.min(
@@ -89,10 +94,9 @@ export async function submitFeedback(data: z.infer<typeof FeedbackSchema>) {
     );
 
   // «Zu mainstream»: Popularity-Schwelle etwas senken
-  const newThreshold =
-    category === "too-mainstream"
-      ? Math.max(20, (profile?.popularityThreshold ?? 70) - 5)
-      : undefined;
+  const newThreshold = cats.includes("too-mainstream")
+    ? Math.max(20, (profile?.popularityThreshold ?? 70) - 5)
+    : undefined;
 
   await prisma.userProfile.upsert({
     where: { userId },

@@ -49,9 +49,16 @@ export function RecommendationsView({
 }: Props) {
   const [recs, setRecs] = useState(initialRecs);
   const [activeGenre, setActiveGenre] = useState("Alle");
-  const [mood, setMood] = useState(initialMood);
+  // Mehrere Stimmungen möglich – gespeichert als kommagetrennter Text
+  const initialParts = initialMood
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const [moods, setMoods] = useState<string[]>(
+    initialParts.filter((p) => MOODS.includes(p))
+  );
   const [moodText, setMoodText] = useState(
-    MOODS.includes(initialMood) ? "" : initialMood
+    initialParts.filter((p) => !MOODS.includes(p)).join(", ")
   );
   const [selectedPlaylist, setSelectedPlaylist] = useState("");
   const [noResult, setNoResult] = useState<{
@@ -144,14 +151,12 @@ export function RecommendationsView({
     });
   };
 
-  // Freitext-Stimmung: sofort speichern und passende Empfehlungen holen
+  // Freitext-Stimmung: speichern und direkt passende Empfehlungen holen
   const submitMoodText = () => {
-    const text = moodText.trim();
-    if (!text || isPending) return;
-    setMood("");
+    if (isPending) return;
     setError("");
     startTransition(async () => {
-      await updateProfile({ currentMood: text });
+      await updateProfile({ currentMood: combinedMood(moods, moodText) });
       await runGeneration();
     });
   };
@@ -164,6 +169,18 @@ export function RecommendationsView({
     startTransition(async () => {
       mergeResults(await generateFromPlaylist(pl.id, pl.name));
       window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
+  // "Nichts gefunden": Stimmungen zurücksetzen und breit suchen
+  const resetMoodAndRetry = () => {
+    if (isPending) return;
+    setMoods([]);
+    setMoodText("");
+    setError("");
+    startTransition(async () => {
+      await updateProfile({ currentMood: "" });
+      await runGeneration();
     });
   };
 
@@ -183,14 +200,20 @@ export function RecommendationsView({
     startTransition(runGeneration);
   };
 
-  // Stimmung wählen → speichern → direkt passende Empfehlungen generieren
+  // Stimmungen kombinieren und sofort speichern; generiert wird über
+  // «Neue Empfehlungen» (oder Enter im Freitext-Feld)
+  const combinedMood = (nextMoods: string[], text: string) =>
+    nextMoods.concat(text.trim() ? [text.trim()] : []).join(", ");
+
   const selectMood = (m: string) => {
-    const next = mood === m ? "" : m;
-    setMood(next);
+    if (isPending) return;
+    const next = moods.includes(m)
+      ? moods.filter((x) => x !== m)
+      : [...moods, m];
+    setMoods(next);
     setError("");
     startTransition(async () => {
-      await updateProfile({ currentMood: next });
-      if (next) await runGeneration();
+      await updateProfile({ currentMood: combinedMood(next, moodText) });
     });
   };
 
@@ -271,12 +294,13 @@ export function RecommendationsView({
               Popularity-Filter auf {Math.min(100, noResult.threshold + 10)}{" "}
               erhöhen & erneut suchen
             </button>
-            <a
-              href="/dashboard/profile"
-              className="px-3.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 text-xs font-medium transition-colors"
+            <button
+              onClick={resetMoodAndRetry}
+              disabled={isPending}
+              className="px-3.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 text-xs font-medium transition-colors disabled:opacity-50"
             >
-              Genres im Profil erweitern
-            </a>
+              Stimmungen zurücksetzen & breit suchen
+            </button>
           </div>
         </div>
       )}
@@ -314,7 +338,7 @@ export function RecommendationsView({
             className={`
               px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border disabled:opacity-50
               ${
-                mood === m
+                moods.includes(m)
                   ? "bg-accent-pink/20 border-accent-pink/40 text-accent-pink"
                   : "bg-white/5 border-white/10 text-white/45 hover:text-white/70 hover:border-white/20"
               }

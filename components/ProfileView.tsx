@@ -6,7 +6,6 @@ import {
   User2,
   Music2,
   Sliders,
-  Tag,
   CheckCircle2,
   AlertCircle,
   Plus,
@@ -16,7 +15,6 @@ import {
   ThumbsDown,
 } from "lucide-react";
 import { updateProfile, importSpotifyTopArtists } from "@/actions/profile";
-import { ALL_GENRES } from "@/lib/genres";
 
 interface Props {
   profile: any;
@@ -35,15 +33,12 @@ function streamsLabel(pop: number): string {
 
 export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
   const topArtists = (profile?.topArtists ?? []) as string[];
-  const genrePrefs = (profile?.genrePreferences ?? {}) as Record<string, boolean>;
 
   const [mood, setMood] = useState(profile?.currentMood ?? "");
   const [aesthetic, setAesthetic] = useState(profile?.aestheticText ?? "");
   const [threshold, setThreshold] = useState(profile?.popularityThreshold ?? 70);
   const [artists, setArtists] = useState<string[]>(topArtists);
   const [newArtist, setNewArtist] = useState("");
-  const [genres, setGenres] = useState<string[]>(Object.keys(genrePrefs));
-  const [genreSearch, setGenreSearch] = useState("");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -57,14 +52,11 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
     setSaved(false);
     setSaveError("");
     startTransition(async () => {
-      const genrePreferences: Record<string, number> = {};
-      genres.forEach((g) => { genrePreferences[g] = 1.0; });
       const result = await updateProfile({
         currentMood: mood,
         aestheticText: aesthetic,
         popularityThreshold: threshold,
         topArtists: artists,
-        genrePreferences,
       });
       if (result.success) setSaved(true);
       else setSaveError(result.error ?? "Speichern fehlgeschlagen");
@@ -106,42 +98,6 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
     setArtists(next);
     persistArtists(next);
   };
-
-  // Genre-Änderungen ebenfalls sofort speichern
-  const persistGenres = (next: string[]) => {
-    startTransition(async () => {
-      const genrePreferences: Record<string, number> = {};
-      next.forEach((g) => { genrePreferences[g] = 1.0; });
-      const result = await updateProfile({ genrePreferences });
-      if (!result.success)
-        setSaveError(result.error ?? "Speichern fehlgeschlagen");
-    });
-  };
-
-  const toggleGenre = (g: string) => {
-    const next = genres.includes(g)
-      ? genres.filter((x) => x !== g)
-      : [...genres, g];
-    setGenres(next);
-    persistGenres(next);
-  };
-
-  const addCustomGenre = () => {
-    const trimmed = genreSearch.trim().toLowerCase();
-    if (trimmed && !genres.includes(trimmed)) {
-      const next = [...genres, trimmed];
-      setGenres(next);
-      persistGenres(next);
-    }
-    setGenreSearch("");
-  };
-
-  const searchLower = genreSearch.trim().toLowerCase();
-  const availableGenres = ALL_GENRES.filter(
-    (g) => !genres.includes(g) && (!searchLower || g.includes(searchLower))
-  );
-  const exactMatchExists =
-    genres.includes(searchLower) || ALL_GENRES.includes(searchLower);
 
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto">
@@ -302,68 +258,6 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
             </div>
           </section>
 
-          {/* Genres */}
-          <section className="glass rounded-2xl p-6">
-            <h2 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Tag className="w-4 h-4 text-accent-teal" />
-              Bevorzugte Genres ({genres.length})
-            </h2>
-
-            <input
-              type="text"
-              value={genreSearch}
-              onChange={(e) => setGenreSearch(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Enter" && !exactMatchExists && addCustomGenre()
-              }
-              placeholder="Genre suchen oder eigenes hinzufügen..."
-              className="w-full bg-surface-700 border border-white/10 rounded-xl px-4 py-2.5 mb-4 text-white/80 text-sm placeholder-white/20 focus:outline-none focus:border-brand-500/50 transition-colors"
-            />
-
-            {/* Ausgewählte Genres */}
-            {genres.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-white/5">
-                {genres.map((g) => (
-                  <button
-                    key={g}
-                    onClick={() => toggleGenre(g)}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border bg-brand-600/25 border-brand-500/40 text-brand-200 hover:bg-brand-600/40"
-                  >
-                    {g}
-                    <X className="w-3 h-3" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Verfügbare Genres */}
-            <div className="flex flex-wrap gap-2 max-h-56 overflow-y-auto">
-              {availableGenres.map((g) => (
-                <button
-                  key={g}
-                  onClick={() => toggleGenre(g)}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border bg-white/5 border-white/10 text-white/40 hover:text-white/70 hover:border-white/20"
-                >
-                  {g}
-                </button>
-              ))}
-
-              {searchLower && !exactMatchExists && (
-                <button
-                  onClick={addCustomGenre}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border bg-accent-teal/10 border-accent-teal/30 text-accent-teal hover:bg-accent-teal/20"
-                >
-                  <Plus className="w-3 h-3" />
-                  «{searchLower}» hinzufügen
-                </button>
-              )}
-
-              {availableGenres.length === 0 && !searchLower && (
-                <p className="text-white/25 text-sm">Alle Genres ausgewählt.</p>
-              )}
-            </div>
-          </section>
-
           {/* Save button */}
           <div className="flex items-center gap-4">
             <button
@@ -440,7 +334,7 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
               {[
                 { label: "Popularity-Schwelle", value: `${threshold}/100`, ok: true },
                 { label: "Top-Künstler", value: `${artists.length}`, ok: artists.length > 0 },
-                { label: "Genres", value: `${genres.length}`, ok: genres.length > 0 },
+                { label: "Stimmung", value: mood ? "Gesetzt" : "–", ok: !!mood },
                 { label: "Spotify", value: hasSpotify ? "Verbunden" : "Getrennt", ok: hasSpotify },
                 { label: "Feedback-Daten", value: `${totalFeedback}`, ok: totalFeedback > 0 },
               ].map(({ label, value, ok }) => (
