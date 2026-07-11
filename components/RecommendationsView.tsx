@@ -17,6 +17,7 @@ import {
 import {
   generateRecommendations,
   generateSimilarRecommendations,
+  generateFromPlaylist,
   dismissRecommendation,
 } from "@/actions/recommendations";
 import { updateProfile } from "@/actions/profile";
@@ -26,6 +27,7 @@ interface Props {
   initialRecs: any[];
   hasSpotify: boolean;
   initialMood?: string;
+  playlists?: { id: string; name: string }[];
 }
 
 const MOODS = [
@@ -43,10 +45,19 @@ export function RecommendationsView({
   initialRecs,
   hasSpotify,
   initialMood = "",
+  playlists = [],
 }: Props) {
   const [recs, setRecs] = useState(initialRecs);
   const [activeGenre, setActiveGenre] = useState("Alle");
   const [mood, setMood] = useState(initialMood);
+  const [moodText, setMoodText] = useState(
+    MOODS.includes(initialMood) ? "" : initialMood
+  );
+  const [selectedPlaylist, setSelectedPlaylist] = useState("");
+  const [noResult, setNoResult] = useState<{
+    genres: string[];
+    threshold: number;
+  } | null>(null);
   const [excludeSaved, setExcludeSaved] = useState(true);
   // IDs der zuletzt generierten Empfehlungen – für die Trennung neu/früher
   const [latestIds, setLatestIds] = useState<Set<string>>(new Set());
@@ -94,7 +105,14 @@ export function RecommendationsView({
       ? "Alle"
       : activeGenre;
 
-  const mergeResults = (result: { success: boolean; items: any[]; error?: string }) => {
+  const mergeResults = (result: {
+    success: boolean;
+    items: any[];
+    error?: string;
+    searchedGenres?: string[];
+    threshold?: number;
+  }) => {
+    setNoResult(null);
     if (result.success) {
       const newIds = new Set<string>(result.items.map((r: any) => r.id));
       setLatestIds(newIds);
@@ -105,6 +123,9 @@ export function RecommendationsView({
         ];
         return merged.slice(0, 48);
       });
+    } else if (result.searchedGenres && result.threshold != null) {
+      // Erklärung + Filter-Vorschlag statt nur einer Fehlermeldung
+      setNoResult({ genres: result.searchedGenres, threshold: result.threshold });
     } else {
       setError(result.error ?? "Fehler bei der Generierung");
     }
@@ -120,6 +141,40 @@ export function RecommendationsView({
     startTransition(async () => {
       mergeResults(await generateSimilarRecommendations(id));
       window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
+  // Freitext-Stimmung: sofort speichern und passende Empfehlungen holen
+  const submitMoodText = () => {
+    const text = moodText.trim();
+    if (!text || isPending) return;
+    setMood("");
+    setError("");
+    startTransition(async () => {
+      await updateProfile({ currentMood: text });
+      await runGeneration();
+    });
+  };
+
+  // Gewählte Playlist gezielt durchsuchen
+  const handleFromPlaylist = () => {
+    const pl = playlists.find((p) => p.id === selectedPlaylist);
+    if (!pl || isPending) return;
+    setError("");
+    startTransition(async () => {
+      mergeResults(await generateFromPlaylist(pl.id, pl.name));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
+  // "Nichts gefunden": Popularity-Filter lockern und direkt neu suchen
+  const relaxFilterAndRetry = () => {
+    if (!noResult || isPending) return;
+    const next = Math.min(100, noResult.threshold + 10);
+    setError("");
+    startTransition(async () => {
+      await updateProfile({ popularityThreshold: next });
+      await runGeneration();
     });
   };
 
@@ -195,6 +250,37 @@ export function RecommendationsView({
         </div>
       )}
 
+      {/* Nichts gefunden – erklären und Lösungen anbieten */}
+      {noResult && (
+        <div className="mb-6 p-4 rounded-xl glass border border-accent-yellow/25 text-sm">
+          <p className="text-white/80 font-medium mb-1">
+            Nichts Neues gefunden
+          </p>
+          <p className="text-white/40 text-xs leading-relaxed mb-3">
+            Gesucht wurde in: {noResult.genres.slice(0, 10).join(", ")}
+            {noResult.genres.length > 10 ? "…" : ""} – mit Popularity-Filter{" "}
+            {noResult.threshold}/100. Alle passenden Künstler kennst du schon
+            oder wurden bereits vorgeschlagen.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={relaxFilterAndRetry}
+              disabled={isPending}
+              className="px-3.5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-on-brand text-xs font-medium transition-colors disabled:opacity-50"
+            >
+              Popularity-Filter auf {Math.min(100, noResult.threshold + 10)}{" "}
+              erhöhen & erneut suchen
+            </button>
+            <a
+              href="/dashboard/profile"
+              className="px-3.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 text-xs font-medium transition-colors"
+            >
+              Genres im Profil erweitern
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Bibliothek-Filter – steuert die nächste Generierung */}
       <div className="flex gap-2 flex-wrap mb-4">
         <BookmarkX className="w-4 h-4 text-white/30 self-center" />
@@ -217,9 +303,9 @@ export function RecommendationsView({
         </button>
       </div>
 
-      {/* Stimmung – steuert die nächste Generierung */}
-      <div className="flex gap-2 flex-wrap mb-4">
-        <Heart className="w-4 h-4 text-white/30 self-center" />
+      {/* Stimmung – steuert die nächste Generierung, wird sofort gespeichert */}
+      <div className="flex gap-2 flex-wrap mb-4 items-center">
+        <Heart className="w-4 h-4 text-white/30" />
         {MOODS.map((m) => (
           <button
             key={m}
@@ -237,7 +323,45 @@ export function RecommendationsView({
             {m}
           </button>
         ))}
+        <input
+          type="text"
+          value={moodText}
+          onChange={(e) => setMoodText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submitMoodText()}
+          placeholder="Eigene Stimmung… (Enter)"
+          disabled={isPending}
+          className="px-3.5 py-1.5 rounded-full text-xs bg-surface-700 border border-white/10 text-white/70 placeholder-white/25 focus:outline-none focus:border-accent-pink/40 transition-colors w-44 disabled:opacity-50"
+        />
       </div>
+
+      {/* Gezielt aus einer Playlist entdecken */}
+      {playlists.length > 0 && (
+        <div className="flex gap-2 flex-wrap mb-4 items-center">
+          <ListMusic className="w-4 h-4 text-white/30" />
+          <select
+            value={selectedPlaylist}
+            onChange={(e) => setSelectedPlaylist(e.target.value)}
+            disabled={isPending}
+            className="px-3 py-1.5 rounded-full text-xs bg-surface-700 border border-white/10 text-white/70 focus:outline-none focus:border-accent-teal/40 transition-colors max-w-[16rem] disabled:opacity-50"
+          >
+            <option value="">Aus Playlist entdecken…</option>
+            {playlists.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {selectedPlaylist && (
+            <button
+              onClick={handleFromPlaylist}
+              disabled={isPending}
+              className="px-3.5 py-1.5 rounded-full text-xs font-medium bg-accent-teal/15 border border-accent-teal/30 text-accent-teal hover:bg-accent-teal/25 transition-colors disabled:opacity-50"
+            >
+              Durchsuchen
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Genre Filter – zeigt die Genres der aktuellen Empfehlungen */}
       {genreOptions.length > 1 && (

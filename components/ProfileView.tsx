@@ -24,6 +24,15 @@ interface Props {
   feedbackStats: { positive: boolean; _count: { id: number } }[];
 }
 
+// Popularität (0–100) grob in Streams übersetzen (logarithmische Skala:
+// 0 ≈ unter 1'000, 100 ≈ über 1 Milliarde)
+function streamsLabel(pop: number): string {
+  const streams = Math.pow(10, 3 + (pop / 100) * 6);
+  if (streams >= 1e9) return "über 1 Mrd. Streams";
+  if (streams >= 1e6) return `≈ ${Math.round(streams / 1e6)} Mio. Streams`;
+  return `≈ ${Math.round(streams / 1e3)}'000 Streams`;
+}
+
 export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
   const topArtists = (profile?.topArtists ?? []) as string[];
   const genrePrefs = (profile?.genrePreferences ?? {}) as Record<string, boolean>;
@@ -219,7 +228,7 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
 
               <div>
                 <label className="block text-xs text-white/40 mb-1.5 font-medium uppercase tracking-wider">
-                  Popularity-Filter (max. {threshold}/100)
+                  Popularity-Filter
                 </label>
                 <div className="flex items-center gap-4">
                   <input
@@ -230,12 +239,17 @@ export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {
                     onChange={(e) => setThreshold(Number(e.target.value))}
                     className="flex-1 accent-brand-500"
                   />
-                  <span className="text-brand-300 font-mono text-sm w-12 text-right">
-                    {threshold}
+                  <span className="text-brand-300 font-mono text-sm w-28 text-right">
+                    {streamsLabel(threshold)}
                   </span>
                 </div>
+                <div className="flex justify-between text-white/25 text-xs mt-1">
+                  <span>unter 1'000 Streams</span>
+                  <span>über 1 Mrd. Streams</span>
+                </div>
                 <p className="text-white/25 text-xs mt-1">
-                  Künstler mit Popularität über {threshold} werden herausgefiltert
+                  Künstler mit mehr als {streamsLabel(threshold)} werden
+                  herausgefiltert (Popularität {threshold}/100)
                 </p>
               </div>
             </div>

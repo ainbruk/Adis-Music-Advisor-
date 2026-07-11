@@ -88,6 +88,122 @@ export async function generateSimilarRecommendations(recommendationId: string) {
   }
 }
 
+// Empfehlungen gezielt aus einer vom Nutzer gewählten Playlist
+export async function generateFromPlaylist(
+  playlistId: string,
+  playlistName: string
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id)
+      return { success: false, error: "Nicht authentifiziert", items: [] };
+
+    const userId = session.user.id;
+    const accessToken = (session as any).accessToken as string | undefined;
+    const refreshToken = (session as any).refreshToken as string | undefined;
+    if (!accessToken)
+      return { success: false, error: "Spotify nicht verbunden", items: [] };
+
+    const profile = await prisma.userProfile.findUnique({ where: { userId } });
+    const userPrefs: UserPreferences = {
+      popularityThreshold: profile?.popularityThreshold ?? 70,
+      topArtists: Array.isArray(profile?.topArtists)
+        ? (profile!.topArtists as string[])
+        : [],
+      genreWeights: (profile?.genreWeights ?? {}) as Record<string, number>,
+      artistWeights: (profile?.artistWeights ?? {}) as Record<string, number>,
+    };
+
+    const previous = await prisma.recommendation.findMany({
+      where: { userId },
+      select: { artistName: true },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+    const blocked = new Set<string>();
+    for (const r of previous)
+      for (const n of r.artistName.split(", ")) blocked.add(n.toLowerCase());
+    for (const n of userPrefs.topArtists) blocked.add(n.toLowerCase());
+
+    const tracks = await getPlaylistTracks(
+      accessToken,
+      playlistId,
+      refreshToken,
+      50
+    );
+    const scored = filterAndScoreTracks(tracks, userPrefs).filter(
+      (c) =>
+        !c.artistName.split(", ").some((n) => blocked.has(n.toLowerCase()))
+    );
+
+    const seenKeys = new Set<string>();
+    const top = scored
+      .filter((c) => {
+        const k = `${c.artistName}::${c.trackName ?? ""}`;
+        if (seenKeys.has(k)) return false;
+        seenKeys.add(k);
+        return true;
+      })
+      .slice(0, 8)
+      .map((c) => ({
+        ...c,
+        reason: `Aus deiner Playlist «${playlistName}»`,
+        tags: c.tags.concat("aus-playlist"),
+        scoreDetails: {
+          score: Math.round(
+            (c.qualityScore * 0.45 + c.undergroundScore * 0.3 + 0.05) * 100
+          ),
+          quality: Math.round(c.qualityScore * 100),
+          underground: Math.round(c.undergroundScore * 100),
+          popularity: c.popularity,
+          source: "Playlist",
+        },
+      }));
+
+    if (top.length === 0)
+      return {
+        success: false,
+        error: `In «${playlistName}» wurde nichts Neues unter Popularität ${userPrefs.popularityThreshold} gefunden – die passenden Künstler kennst du schon oder wurden bereits vorgeschlagen.`,
+        items: [],
+        threshold: userPrefs.popularityThreshold,
+      };
+
+    const saved = await prisma.$transaction(
+      top.map((c) =>
+        prisma.recommendation.create({
+          data: {
+            userId,
+            artistName: c.artistName,
+            trackName: c.trackName,
+            albumName: c.albumName,
+            genre: c.genre,
+            spotifyId: c.spotifyId,
+            spotifyUrl: c.spotifyUrl,
+            coverUrl: c.coverUrl,
+            previewUrl: c.previewUrl,
+            popularity: c.popularity,
+            qualityScore: c.qualityScore,
+            undergroundScore: c.undergroundScore,
+            reason: c.reason,
+            tags: c.tags,
+            scoreDetails: c.scoreDetails,
+          },
+        })
+      )
+    );
+
+    revalidatePath("/dashboard");
+    return { success: true, items: saved };
+  } catch (e) {
+    console.error("[generateFromPlaylist]", e);
+    return {
+      success: false,
+      error: "Playlist konnte nicht durchsucht werden",
+      items: [],
+    };
+  }
+}
+
 async function generateRecommendationsInternal(
   limit: number,
   excludeSaved: boolean,
@@ -121,6 +237,7 @@ async function generateRecommendationsInternal(
   let candidates = [];
   let diagSearched = 0;
   let diagFresh = 0;
+  let diagGenres: string[] = [];
 
   // Bevorzugte Genres und Stimmungs-Genres – fliessen in Suche UND Scoring ein
   const preferredGenres = Object.keys(
@@ -213,6 +330,7 @@ async function generateRecommendationsInternal(
     const genrePool = seed
       ? seed.genres.slice(0, 4)
       : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres)));
+    diagGenres = genrePool.slice(0, 16);
 
     const seenIds = new Set<string>();
     const searchWave = async (genres: string[], offsetBase: number) => {
@@ -486,8 +604,11 @@ async function generateRecommendationsInternal(
   if (top.length === 0) {
     return {
       success: false,
-      error: `Keine neuen Empfehlungen gefunden (${diagSearched} Künstler geprüft, ${diagFresh} unverbraucht, ${candidates.length} nach Filter). Füge im Profil weitere Genres hinzu oder wähle eine andere Stimmung.`,
+      error: `Keine neuen Empfehlungen gefunden (${diagSearched} Künstler geprüft, ${diagFresh} unverbraucht).`,
       items: [],
+      // Für die "Nichts gefunden"-Erklärung inkl. Filter-Vorschlag im UI
+      searchedGenres: diagGenres,
+      threshold: userPrefs.popularityThreshold,
     };
   }
 
