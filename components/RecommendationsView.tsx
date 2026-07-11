@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   ListMusic,
+  TrendingDown,
 } from "lucide-react";
 import {
   generateRecommendations,
@@ -21,12 +22,14 @@ import {
   dismissRecommendation,
 } from "@/actions/recommendations";
 import { updateProfile } from "@/actions/profile";
+import { streamsLabel } from "@/lib/format";
 import { RecommendationCard } from "@/components/RecommendationCard";
 
 interface Props {
   initialRecs: any[];
   hasSpotify: boolean;
   initialMood?: string;
+  initialThreshold?: number;
   playlists?: { id: string; name: string }[];
 }
 
@@ -45,6 +48,7 @@ export function RecommendationsView({
   initialRecs,
   hasSpotify,
   initialMood = "",
+  initialThreshold = 70,
   playlists = [],
 }: Props) {
   const [recs, setRecs] = useState(initialRecs);
@@ -61,6 +65,7 @@ export function RecommendationsView({
     initialParts.filter((p) => !MOODS.includes(p)).join(", ")
   );
   const [selectedPlaylist, setSelectedPlaylist] = useState("");
+  const [threshold, setThreshold] = useState(initialThreshold);
   const [noResult, setNoResult] = useState<{
     genres: string[];
     threshold: number;
@@ -188,10 +193,18 @@ export function RecommendationsView({
   const relaxFilterAndRetry = () => {
     if (!noResult || isPending) return;
     const next = Math.min(100, noResult.threshold + 10);
+    setThreshold(next);
     setError("");
     startTransition(async () => {
       await updateProfile({ popularityThreshold: next });
       await runGeneration();
+    });
+  };
+
+  // Regler losgelassen → Schwelle sofort speichern
+  const persistThreshold = () => {
+    startTransition(async () => {
+      await updateProfile({ popularityThreshold: threshold });
     });
   };
 
@@ -386,6 +399,26 @@ export function RecommendationsView({
           )}
         </div>
       )}
+
+      {/* Popularity-Filter direkt hier – wird beim Loslassen gespeichert */}
+      <div className="flex gap-3 flex-wrap items-center mb-4">
+        <TrendingDown className="w-4 h-4 text-white/30 flex-shrink-0" />
+        <input
+          type="range"
+          min={20}
+          max={100}
+          value={threshold}
+          onChange={(e) => setThreshold(Number(e.target.value))}
+          onMouseUp={persistThreshold}
+          onTouchEnd={persistThreshold}
+          onBlur={persistThreshold}
+          disabled={isPending}
+          className="flex-1 min-w-32 max-w-xs accent-brand-500 disabled:opacity-50"
+        />
+        <span className="text-xs text-white/45">
+          bis <span className="text-brand-300">{streamsLabel(threshold)}</span>
+        </span>
+      </div>
 
       {/* Genre Filter – zeigt die Genres der aktuellen Empfehlungen */}
       {genreOptions.length > 1 && (

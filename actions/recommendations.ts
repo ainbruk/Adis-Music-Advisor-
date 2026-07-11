@@ -336,11 +336,22 @@ async function generateRecommendationsInternal(
 
     // Genre-Pool: Stimmung zuerst, dann die gemischten Profil-Genres;
     // bei der Ähnlichkeitssuche zählen nur die Seed-Genres
-    const genrePool = seed
+    let genrePool = seed
       ? seed.genres.slice(0, 4)
       : directGenres.length > 0
         ? directGenres.slice(0, 4)
-        : Array.from(new Set(moodGenres.slice(0, 3).concat(baseGenres)));
+        : Array.from(new Set(moodGenres.concat(baseGenres)));
+
+    // Fallback: Spotify liefert oft keine Künstler-Genres mehr – ist der
+    // Pool leer (keine Stimmung, kein Hörverhalten-Genre), aus dem
+    // ganzen Katalog schöpfen statt gar nicht zu suchen
+    if (!seed && genrePool.length === 0) {
+      genrePool = ALL_GENRES.slice();
+      for (let i = genrePool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [genrePool[i], genrePool[j]] = [genrePool[j], genrePool[i]];
+      }
+    }
     diagGenres = genrePool.slice(0, 16);
 
     const seenIds = new Set<string>();

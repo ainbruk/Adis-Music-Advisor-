@@ -15,20 +15,12 @@ import {
   ThumbsDown,
 } from "lucide-react";
 import { updateProfile, importSpotifyTopArtists } from "@/actions/profile";
+import { streamsLabel } from "@/lib/format";
 
 interface Props {
   profile: any;
   hasSpotify: boolean;
   feedbackStats: { positive: boolean; _count: { id: number } }[];
-}
-
-// Popularität (0–100) grob in Streams übersetzen (logarithmische Skala:
-// 0 ≈ unter 1'000, 100 ≈ über 1 Milliarde)
-function streamsLabel(pop: number): string {
-  const streams = Math.pow(10, 3 + (pop / 100) * 6);
-  if (streams >= 1e9) return "über 1 Mrd. Streams";
-  if (streams >= 1e6) return `≈ ${Math.round(streams / 1e6)} Mio. Streams`;
-  return `≈ ${Math.round(streams / 1e3)}'000 Streams`;
 }
 
 export function ProfileView({ profile, hasSpotify, feedbackStats }: Props) {

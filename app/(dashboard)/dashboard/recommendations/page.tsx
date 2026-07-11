@@ -15,15 +15,17 @@ export default async function RecommendationsPage() {
 
   let recs: any[] = [];
   let currentMood = "";
+  let threshold = 70;
   let playlists: { id: string; name: string }[] = [];
 
   try {
     recs = await getStoredRecommendations();
     const profile = await prisma.userProfile.findUnique({
       where: { userId: session.user.id },
-      select: { currentMood: true },
+      select: { currentMood: true, popularityThreshold: true },
     });
     currentMood = profile?.currentMood ?? "";
+    threshold = profile?.popularityThreshold ?? 70;
   } catch {
     // DB nicht konfiguriert
   }
@@ -44,6 +46,7 @@ export default async function RecommendationsPage() {
       initialRecs={recs}
       hasSpotify={!!accessToken}
       initialMood={currentMood}
+      initialThreshold={threshold}
       playlists={playlists}
     />
   );
