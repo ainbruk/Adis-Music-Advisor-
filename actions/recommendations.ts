@@ -6,7 +6,6 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   getTopArtists,
-  getTopTracks,
   searchArtistsByGenre,
   getArtistTopTracks,
   getFollowedArtists,
@@ -273,15 +272,13 @@ async function generateRecommendationsInternal(
   }
 
   if (accessToken) {
-    const [topArtists, topTracks, followedArtists, savedTracks] =
-      await Promise.all([
-        getTopArtists(accessToken, "medium_term", 50, refreshToken),
-        getTopTracks(accessToken, "medium_term", 50, refreshToken),
-        excludeSaved
-          ? getFollowedArtists(accessToken, refreshToken)
-          : Promise.resolve([]),
-        getSavedTracks(accessToken, refreshToken),
-      ]);
+    const [topArtists, followedArtists, savedTracks] = await Promise.all([
+      getTopArtists(accessToken, "medium_term", 50, refreshToken),
+      excludeSaved
+        ? getFollowedArtists(accessToken, refreshToken)
+        : Promise.resolve([]),
+      getSavedTracks(accessToken, refreshToken),
+    ]);
 
     const savedArtistNames = excludeSaved
       ? savedTracks.flatMap((t) =>
@@ -397,12 +394,10 @@ async function generateRecommendationsInternal(
             }
       );
 
-    const trackCandidates = fillGenre(filterAndScoreTracks(topTracks, userPrefs));
-
     // Playlists durchforsten: unbekannte Künstler aus eigenen und
     // gefolgten Playlists (2–3 zufällige pro Generierung)
     const playlistTask = (async () => {
-      const result: typeof trackCandidates = [];
+      const result: ReturnType<typeof filterAndScoreTracks> = [];
       if (seed) return result;
       try {
         const playlists = await getUserPlaylists(accessToken, refreshToken);
@@ -464,7 +459,6 @@ async function generateRecommendationsInternal(
       ...playlistCandidates.filter(isDiscovery).slice(0, 10),
       ...libraryCandidates.slice(0, 4),
       ...freshArtistCandidates,
-      ...trackCandidates.filter(isDiscovery),
     ];
   } else {
     // No Spotify connection: use curated underground defaults

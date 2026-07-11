@@ -104,6 +104,38 @@ export function moodToGenres(mood?: string, aesthetic?: string): string[] {
   return genres;
 }
 
+// Funktionale Audio-Inhalte, die keine Musik-Entdeckungen sind:
+// Devotional-Aufnahmen, Meditations-/Schlaf-Sounds, ASMR usw.
+const NOISE_KEYWORDS = [
+  "stotram",
+  "mantra",
+  "bhajan",
+  "kirtan",
+  "devotional",
+  "meditation",
+  "sleep",
+  "schlaf",
+  "white noise",
+  "brown noise",
+  "rain sound",
+  "nature sound",
+  "asmr",
+  "lullaby",
+  "wiegenlied",
+  "yoga",
+  "healing",
+  "binaural",
+  "study music",
+  "8d audio",
+  "baby",
+  "relaxing spa",
+];
+
+function isNoiseText(text: string): boolean {
+  const hay = text.toLowerCase();
+  return NOISE_KEYWORDS.some((k) => hay.includes(k));
+}
+
 function extractMoodKeywords(mood?: string, aesthetic?: string): string[] {
   const text = `${mood ?? ""} ${aesthetic ?? ""}`.toLowerCase();
   const keywords: string[] = [];
@@ -245,6 +277,12 @@ export function filterAndScoreArtists(
       continue;
     }
 
+    // Qualitäts-Untergrenzen: funktionale Inhalte (Mantras, Schlaf-Sounds …)
+    // und Junk-Profile sind keine Underground-Entdeckungen
+    if (isNoiseText(`${artist.name} ${artist.genres.join(" ")}`)) continue;
+    if (!isInTopList && artist.popularity < 5) continue;
+    if (!isInTopList && (artist.followers?.total ?? 0) < 300) continue;
+
     const undergroundScore = computeUndergroundScore(
       artist.popularity,
       artist.genres,
@@ -317,6 +355,14 @@ export function filterAndScoreTracks(
       },
     };
     if (track.popularity > userPrefs.popularityThreshold) continue;
+
+    // Funktionale Audio-Inhalte aussortieren (Mantras, Schlaf-Sounds …)
+    if (
+      isNoiseText(
+        `${track.artists.map((a) => a.name).join(" ")} ${track.name}`
+      )
+    )
+      continue;
 
     const popularity = track.popularity;
     const undergroundScore = Math.max(
