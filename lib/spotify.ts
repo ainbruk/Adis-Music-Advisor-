@@ -299,7 +299,51 @@ export async function searchArtistsByGenre(
     accessToken,
     refreshToken
   );
-  return Array.isArray(data?.artists?.items) ? data!.artists.items : [];
+  let items = Array.isArray(data?.artists?.items) ? data!.artists.items : [];
+
+  // Der genre:-Filter liefert seit den Spotify-API-Änderungen oft nichts
+  // mehr – dann als freie Künstler-Suche mit dem Genre-Begriff versuchen
+  if (items.length < 5 && offset === 0) {
+    const alt = new URLSearchParams({
+      q: genre,
+      type: "artist",
+      limit: String(limit),
+    });
+    const altData = await spotifyFetch<{ artists: { items: SpotifyArtist[] } }>(
+      `/search?${alt}`,
+      accessToken,
+      refreshToken
+    );
+    const altItems = Array.isArray(altData?.artists?.items)
+      ? altData!.artists.items
+      : [];
+    const seen = new Set(items.map((i) => i.id));
+    items = items.concat(altItems.filter((a) => !seen.has(a.id)));
+  }
+
+  return items;
+}
+
+// Playlists zu einem Suchbegriff (z.B. Genre) finden – die zuverlässigste
+// Entdeckungsquelle, seit der genre:-Filter kaum mehr bedient wird
+export async function searchPlaylists(
+  accessToken: string,
+  query: string,
+  refreshToken?: string,
+  limit = 5
+): Promise<SpotifyPlaylist[]> {
+  const params = new URLSearchParams({
+    q: query,
+    type: "playlist",
+    limit: String(limit),
+  });
+  const data = await spotifyFetch<{
+    playlists: { items: (SpotifyPlaylist | null)[] };
+  }>(`/search?${params}`, accessToken, refreshToken);
+  const items = Array.isArray(data?.playlists?.items)
+    ? data!.playlists.items
+    : [];
+  return items.filter((p): p is SpotifyPlaylist => !!p && !!p.id);
 }
 
 export async function searchArtist(

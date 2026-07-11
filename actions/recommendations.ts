@@ -12,6 +12,7 @@ import {
   getSavedTracks,
   getUserPlaylists,
   getPlaylistTracks,
+  searchPlaylists,
   searchArtist,
 } from "@/lib/spotify";
 import {
@@ -450,11 +451,45 @@ async function generateRecommendationsInternal(
       return result;
     })();
 
-    const [freshArtistCandidates, playlistCandidates] = await Promise.all([
-      searchTask,
-      playlistTask,
-    ]);
-    diagSearched = seenIds.size;
+    // Genre-Playlists durchsuchen: fremde Playlists zum gesuchten Genre
+    // sind voll mit passenden Künstlern aller Bekanntheitsstufen
+    const genrePlaylistTask = (async () => {
+      const result: ReturnType<typeof filterAndScoreTracks> = [];
+      const genresToMine = genrePool.slice(0, 3);
+      if (genresToMine.length === 0) return result;
+      try {
+        const lists = await Promise.all(
+          genresToMine.map((g) =>
+            searchPlaylists(accessToken, g, refreshToken, 3)
+          )
+        );
+        const pickedIds = new Set<string>();
+        const picks: { g: string; id: string }[] = [];
+        lists.forEach((pls, i) => {
+          for (const p of pls.slice(0, 2)) {
+            if (pickedIds.has(p.id)) continue;
+            pickedIds.add(p.id);
+            picks.push({ g: genresToMine[i], id: p.id });
+          }
+        });
+        const trackLists = await Promise.all(
+          picks.map((p) => getPlaylistTracks(accessToken, p.id, refreshToken))
+        );
+        picks.forEach((p, i) => {
+          const scored = filterAndScoreTracks(trackLists[i], userPrefs);
+          for (const c of scored.slice(0, 10)) {
+            result.push({ ...c, genre: c.genre ?? p.g });
+          }
+        });
+      } catch (e) {
+        console.error("[genrePlaylistCandidates]", e);
+      }
+      return result;
+    })();
+
+    const [freshArtistCandidates, playlistCandidates, genrePlaylistCandidates] =
+      await Promise.all([searchTask, playlistTask, genrePlaylistTask]);
+    diagSearched = seenIds.size + genrePlaylistCandidates.length;
     diagFresh = freshArtistCandidates.length;
 
     // Bibliothek durchforsten: gespeicherte, wenig populäre Songs von
@@ -484,6 +519,7 @@ async function generateRecommendationsInternal(
       ...playlistCandidates.filter(isDiscovery).slice(0, 10),
       ...libraryCandidates.slice(0, 4),
       ...freshArtistCandidates,
+      ...genrePlaylistCandidates.filter(isDiscovery).slice(0, 20),
     ];
   } else {
     // No Spotify connection: use curated underground defaults
