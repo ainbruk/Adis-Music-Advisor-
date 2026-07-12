@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getTopArtists, searchArtistsByGenre } from "@/lib/spotify";
+import {
+  getTopArtists,
+  searchArtistsByGenre,
+  searchPlaylists,
+  getPlaylistTracks,
+} from "@/lib/spotify";
 
 export const maxDuration = 60;
 
-// Diagnose: testet die Empfehlungs-Pipeline Schritt für Schritt
-export async function GET() {
+// Diagnose: testet die Empfehlungs-Pipeline Schritt für Schritt.
+// Optional mit ?genre=psytrance ein bestimmtes Genre durchspielen.
+export async function GET(request: Request) {
   const t0 = Date.now();
   const out: any = { steps: [] };
   const step = (name: string, data: Record<string, unknown>) =>
@@ -22,33 +28,26 @@ export async function GET() {
     const accessToken = (session as any).accessToken as string | undefined;
     const refreshToken = (session as any).refreshToken as string | undefined;
     out.hasAccessToken = !!accessToken;
-    out.hasRefreshToken = !!refreshToken;
 
     const profile = await prisma.userProfile.findUnique({ where: { userId } });
-    const preferredGenres = Object.keys(
-      (profile?.genrePreferences ?? {}) as Record<string, number>
-    );
     const threshold = profile?.popularityThreshold ?? 70;
+    const testGenre =
+      new URL(request.url).searchParams.get("genre") ??
+      (profile?.currentMood || "psytrance");
+    out.testGenre = testGenre;
     step("profil", {
-      bevorzugteGenres: preferredGenres.length,
       popularitySchwelle: threshold,
       stimmung: profile?.currentMood ?? null,
     });
 
-    const [prevCount, prev] = await Promise.all([
-      prisma.recommendation.count({ where: { userId } }),
-      prisma.recommendation.findMany({
-        where: { userId },
-        select: { artistName: true },
-        orderBy: { createdAt: "desc" },
-        take: 500,
-      }),
-    ]);
-    const blocked = new Set(prev.map((r) => r.artistName.toLowerCase()));
-    step("sperrliste", {
-      empfehlungenInDb: prevCount,
-      gesperrteKuenstler: blocked.size,
+    const prev = await prisma.recommendation.findMany({
+      where: { userId },
+      select: { artistName: true },
+      orderBy: { createdAt: "desc" },
+      take: 500,
     });
+    const blocked = new Set(prev.map((r) => r.artistName.toLowerCase()));
+    step("sperrliste", { gesperrteKuenstler: blocked.size });
 
     if (!accessToken) {
       out.fazit = "Kein Spotify-Token – bitte ab- und wieder anmelden";
@@ -61,45 +60,65 @@ export async function GET() {
       50,
       refreshToken
     );
-    step("spotifyTopArtists", {
-      count: topArtists.length,
-      hinweis:
-        topArtists.length === 0
-          ? "0 = Token abgelaufen/ungültig oder keine Hördaten"
-          : "ok",
+    step("spotifyTopArtists", { count: topArtists.length });
+
+    // Quelle 1: Künstler-Suche (genre:-Filter + Freitext-Fallback)
+    const artists = await searchArtistsByGenre(
+      accessToken,
+      testGenre,
+      50,
+      refreshToken,
+      0
+    );
+    const artistsUnder = artists.filter(
+      (a) => (a.popularity ?? 100) <= threshold
+    );
+    const artistsFresh = artistsUnder.filter(
+      (a) => !blocked.has(a.name.toLowerCase())
+    );
+    step("kuenstlerSuche", {
+      treffer: artists.length,
+      unterSchwelle: artistsUnder.length,
+      unverbraucht: artistsFresh.length,
+      beispiele: artistsFresh.slice(0, 5).map((a) => `${a.name} (${a.popularity})`),
     });
 
-    // Probesuche in bis zu 3 Genres
-    const testGenres = (
-      preferredGenres.length > 0
-        ? preferredGenres
-        : ["ambient", "experimental", "indie folk"]
-    ).slice(0, 3);
+    // Quelle 2: Genre-Playlists
+    const playlists = await searchPlaylists(
+      accessToken,
+      testGenre,
+      refreshToken,
+      3
+    );
+    step("playlistSuche", {
+      treffer: playlists.length,
+      namen: playlists.map((p) => p.name),
+    });
 
-    for (const g of testGenres) {
-      const found = await searchArtistsByGenre(
+    if (playlists.length > 0) {
+      const tracks = await getPlaylistTracks(
         accessToken,
-        g,
-        50,
-        refreshToken,
-        0
+        playlists[0].id,
+        refreshToken
       );
-      const underThreshold = found.filter(
-        (a) => (a.popularity ?? 100) <= threshold
+      const under = tracks.filter((t) => (t.popularity ?? 100) <= threshold);
+      const fresh = under.filter(
+        (t) =>
+          !t.artists.some((a) => blocked.has((a.name ?? "").toLowerCase()))
       );
-      const fresh = underThreshold.filter(
-        (a) => !blocked.has(a.name.toLowerCase())
-      );
-      step(`suche:${g}`, {
-        treffer: found.length,
-        unterPopularitySchwelle: underThreshold.length,
+      step("playlistTracks", {
+        playlist: playlists[0].name,
+        tracks: tracks.length,
+        unterSchwelle: under.length,
         unverbraucht: fresh.length,
-        beispieleUnverbraucht: fresh.slice(0, 3).map((a) => a.name),
+        beispiele: fresh
+          .slice(0, 5)
+          .map((t) => `${t.artists[0]?.name} – ${t.name} (${t.popularity})`),
       });
     }
 
     out.fazit =
-      "Wenn 'treffer' 0 ist: Token/Suche defekt. Wenn 'unverbraucht' überall 0: Sperrliste erschöpft.";
+      "Sind bei kuenstlerSuche UND playlistTracks 'unverbraucht' > 0, findet die Generierung Material.";
     return NextResponse.json(out);
   } catch (e: any) {
     out.error = e?.message ?? "Unbekannt";
