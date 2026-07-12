@@ -460,13 +460,18 @@ async function generateRecommendationsInternal(
       try {
         const lists = await Promise.all(
           genresToMine.map((g) =>
-            searchPlaylists(accessToken, g, refreshToken, 3)
+            searchPlaylists(accessToken, g, refreshToken, 5)
           )
         );
         const pickedIds = new Set<string>();
         const picks: { g: string; id: string }[] = [];
         lists.forEach((pls, i) => {
-          for (const p of pls.slice(0, 2)) {
+          // Spotify-eigene/redaktionelle Playlists sind für Apps gesperrt
+          // (Track-Abruf liefert nichts) – nur Nutzer-Playlists verwenden
+          const usable = pls.filter(
+            (p) => (p.owner?.id ?? "").toLowerCase() !== "spotify"
+          );
+          for (const p of usable.slice(0, 3)) {
             if (pickedIds.has(p.id)) continue;
             pickedIds.add(p.id);
             picks.push({ g: genresToMine[i], id: p.id });

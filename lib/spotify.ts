@@ -67,9 +67,11 @@ async function spotifyFetch<T>(
   let token = accessToken;
 
   const makeRequest = async (t: string) => {
+    // no-store: Der Next.js-Daten-Cache ignoriert Auth-Header im Cache-Key
+    // und kann sonst leere/fremde Antworten wiederverwenden
     return fetch(`https://api.spotify.com/v1${endpoint}`, {
       headers: { Authorization: `Bearer ${t}` },
-      next: { revalidate: 300 },
+      cache: "no-store",
     });
   };
 
@@ -215,6 +217,7 @@ export interface SpotifyPlaylist {
   id: string;
   name: string;
   tracks?: { total: number };
+  owner?: { id?: string; display_name?: string };
 }
 
 // Eigene und gefolgte (verlinkte) Playlists

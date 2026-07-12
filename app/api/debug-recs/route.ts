@@ -92,10 +92,42 @@ export async function GET(request: Request) {
     );
     step("playlistSuche", {
       treffer: playlists.length,
-      namen: playlists.map((p) => p.name),
+      namen: playlists.map(
+        (p) => `${p.name} [${p.owner?.id ?? "?"}]`
+      ),
+    });
+
+    // Roh-Abfragen mit Statuscodes – zeigt 403/404 statt stiller Leere
+    const raw = async (endpoint: string) => {
+      const res = await fetch(`https://api.spotify.com/v1${endpoint}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
+      let body: any = null;
+      try {
+        body = await res.json();
+      } catch {}
+      return { status: res.status, body };
+    };
+
+    const rawArtist = await raw(
+      `/search?q=${encodeURIComponent(testGenre)}&type=artist&limit=5`
+    );
+    step("rawKuenstlerSuche", {
+      status: rawArtist.status,
+      count: rawArtist.body?.artists?.items?.length ?? null,
+      apiError: rawArtist.body?.error ?? null,
     });
 
     if (playlists.length > 0) {
+      const rawPl = await raw(`/playlists/${playlists[0].id}/tracks?limit=5`);
+      step("rawPlaylistTracks", {
+        playlist: playlists[0].name,
+        status: rawPl.status,
+        count: rawPl.body?.items?.length ?? null,
+        apiError: rawPl.body?.error ?? null,
+      });
+
       const tracks = await getPlaylistTracks(
         accessToken,
         playlists[0].id,
